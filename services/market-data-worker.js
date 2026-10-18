@@ -41,7 +41,7 @@ export default {
       }
       const localDate = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" }).replaceAll("-", "");
       const date = url.searchParams.get("date") || localDate;
-      if (!/^\\d{8}$/.test(date)) return json({ error: "date must be YYYYMMDD" }, 400);
+      if (!/^\d{8}$/.test(date)) return json({ error: "date must be YYYYMMDD" }, 400);
       const upstream = new URL("https://push2ex.eastmoney.com/" + POOLS[type]);
       upstream.search = new URLSearchParams({
         ut: "7eea3edcaed734bea9cbfc24409ed989",

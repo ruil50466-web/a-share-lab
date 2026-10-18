@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-"""Analyze completed rows in the A-share signal CSV using only Python stdlib.
+"""Descriptive statistics for completed A-share signal records (stdlib only).
 
-Usage:
-  python scripts/analyze_signals.py
-  python scripts/analyze_signals.py path/to/stock_signals.csv
-
-This is descriptive analysis, not a backtest: it does not model execution,
-fees, slippage, limit-up fill constraints, or portfolio-level risk.
+This is not a tradeable backtest: it does not model order execution, fees,
+slippage, limit-up fill constraints, or portfolio-level risk.
 """
 import csv
 import statistics
@@ -16,7 +12,7 @@ from pathlib import Path
 DEFAULT_FILE = Path(__file__).resolve().parents[1] / "data" / "templates" / "stock_signals.csv"
 RETURN_FIELDS = {
     "次日收盘涨幅_pct": "次日收盘涨幅",
-    "次日最高涨幅_pct": "次日最高涨幅",
+    "次日最高涨幅_pct": "次日最高涨幅（不代表可卖在最高点）",
     "3日最高涨幅_pct": "3日最高涨幅",
     "5日最高涨幅_pct": "5日最高涨幅",
 }
@@ -25,7 +21,7 @@ RETURN_FIELDS = {
 def parse_number(value):
     if value is None:
         return None
-    value = value.strip().replace("%", "")
+    value = value.strip().replace("%", "").replace(",", "")
     if not value:
         return None
     try:
@@ -46,6 +42,24 @@ def summarize(label, values):
     )
 
 
+def print_group_summary(rows, field, title):
+    groups = {}
+    for row in rows:
+        label = (row.get(field) or "").strip()
+        ret = parse_number(row.get("次日收盘涨幅_pct"))
+        if label and ret is not None:
+            groups.setdefault(label, []).append(ret)
+    if not groups:
+        return
+    print(f"\n{title}（仅统计有次日收盘涨幅的记录）：")
+    for label, vals in sorted(groups.items()):
+        print(
+            f"- {label}：样本 {len(vals)}，正值占比 "
+            f"{sum(v > 0 for v in vals) / len(vals):.1%}，"
+            f"中位数 {statistics.median(vals):.2f}%"
+        )
+
+
 def main():
     path = Path(sys.argv[1]).expanduser() if len(sys.argv) > 1 else DEFAULT_FILE
     if not path.exists():
@@ -64,23 +78,10 @@ def main():
         values = [n for row in rows if (n := parse_number(row.get(field))) is not None]
         summarize(label, values)
 
-    # Break out by the recorded board stage when enough observations exist.
-    groups = {}
-    for row in rows:
-        stage = (row.get("当日连板高度") or "").strip()
-        ret = parse_number(row.get("次日收盘涨幅_pct"))
-        if stage and ret is not None:
-            groups.setdefault(stage, []).append(ret)
-
-    if groups:
-        print("\n按当日连板高度分组（仅统计有次日收盘涨幅的记录）：")
-        for stage in sorted(groups, key=lambda s: (not s.isdigit(), int(s) if s.isdigit() else s)):
-            vals = groups[stage]
-            print(
-                f"- {stage}：样本 {len(vals)}，正值占比 "
-                f"{sum(v > 0 for v in vals) / len(vals):.1%}，"
-                f"中位数 {statistics.median(vals):.2f}%"
-            )
+    print_group_summary(rows, "当日连板高度", "按当日连板高度分组")
+    print_group_summary(rows, "信号出现批次", "按信号出现批次分组")
+    print_group_summary(rows, "板块地位", "按板块地位分组")
+    print_group_summary(rows, "是否符合模型", "按模型符合度分组")
 
     print("\n注意：缺失值不计入对应指标；小样本统计不代表稳定规律。")
     print("本脚本是描述性统计，不等于可成交回测；尚未计入费用、滑点和涨跌停成交限制。")

@@ -53,7 +53,7 @@ button{border:0;border-radius:10px;padding:12px 14px;font-weight:650;font-size:1
 <p class="section-note">使用免费接口：市场总览、当期涨跌分布、热门板块。每次扫描最多请求3个接口，降低匿名限流风险；结果按接口实际字段展示。热门度不等于板块涨幅或主线。</p>
 <p id="marketStatus" class="status">尚未扫描。扫描结果会标注接口返回的数据，不把热门度当作板块强度。</p>
 <div id="marketMetrics" class="metric-grid"></div>
-<h3 style="font-size:14px;margin:14px 0 6px">市场数据摘要</h3><ul id="marketNotes" class="bullet"></ul>
+<h3 style="font-size:14px;margin:14px 0 6px">市场广度实验判断</h3><div id="marketMood" class="metric-grid"></div><p class="section-note">仅在接口字段能明确识别上涨/下跌家数时计算；阈值是待验证的研究规则，不是买卖信号。</p><h3 style="font-size:14px;margin:14px 0 6px">市场数据摘要</h3><ul id="marketNotes" class="bullet"></ul>
 <h3 style="font-size:14px;margin:14px 0 6px">热门板块（关注度，不是涨幅榜）</h3><div class="table-wrap"><table><thead><tr><th>板块/名称</th><th>热度/排名</th><th>接口返回信息</th></tr></thead><tbody id="hotSectorRows"></tbody></table></div>
 <div class="panel hidden" id="marketRawPanel"><strong>接口原始摘要（核对用）</strong><pre id="marketRaw" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--muted)"></pre></div>
 </div>
@@ -189,10 +189,24 @@ function firstMatch(obj,patterns){
  return null;
 }
 function dataDate(result){if(!result?.ok)return null;return firstMatch(result.envelope?.data??result.data,[/trade.?date/i,/data.?date/i,/日期/,/as.?of/i,/updated.?at/i,/timestamp/i]);}
+function namedMetric(obj,patterns){
+ const direct=firstMatch(obj,patterns);if(direct)return direct;
+ const rows=Array.isArray(obj)?obj:(Array.isArray(obj?.structured)?obj.structured:[]);
+ for(const row of rows){
+  if(!row||typeof row!=="object")continue;
+  const label=first(row,["name","名称","label","指标","title","项目","item","key","字段"]);
+  if(label!==null&&patterns.some(p=>p.test(String(label)))){
+   const value=first(row,["value","数值","count","数量","amount","值","data"]);
+   if(value!==null)return {key:String(label),value:String(value)};
+  }
+ }
+ return null;
+}
+function numericValue(hit){if(!hit)return null;const n=Number(String(hit.value).replace(/[,，\s]/g,""));return Number.isFinite(n)?n:null;}
 async function scanMarket(){
- const btn=$("scanMarket"),status=$("marketStatus"),metrics=$("marketMetrics"),notes=$("marketNotes"),rawPanel=$("marketRawPanel"),raw=$("marketRaw"),sectorRows=$("hotSectorRows");
+ const btn=$("scanMarket"),status=$("marketStatus"),metrics=$("marketMetrics"),notes=$("marketNotes"),mood=$("marketMood"),rawPanel=$("marketRawPanel"),raw=$("marketRaw"),sectorRows=$("hotSectorRows");
  $("copyMarket").disabled=true;latestMarketScan=null;
- btn.disabled=true;status.textContent="正在读取市场总览、当期涨跌分布和热门板块…";metrics.replaceChildren();notes.replaceChildren();sectorRows.replaceChildren();rawPanel.classList.add("hidden");
+ btn.disabled=true;status.textContent="正在读取市场总览、当期涨跌分布和热门板块…";metrics.replaceChildren();notes.replaceChildren();mood.replaceChildren();sectorRows.replaceChildren();rawPanel.classList.add("hidden");
  const endpoints=[
   ["市场总览","https://api.ashareapi.com/v1/market-overview?type=summary"],
   ["当期涨跌分布","https://api.ashareapi.com/v1/changedist"],
@@ -216,7 +230,22 @@ async function scanMarket(){
     ["跌停家数",[/跌停家数/,/跌停只数/,/limit.?down/i]],
     ["市场成交额",[/成交额/,/turnover_amount/i]]
    ];
-   let shown=0;aliases.forEach(([label,patterns])=>{const hit=firstMatch(data,patterns);if(hit){metrics.append(metric(label,hit.value));shown++;}});
+   let shown=0;aliases.forEach(([label,patterns])=>{const hit=namedMetric(data,patterns);if(hit){metrics.append(metric(label,hit.value));shown++;}});
+   const adv=numericValue(namedMetric(data,[/上涨家数/,/上涨只数/,/advancers/i,/up_count/i]));
+   const dec=numericValue(namedMetric(data,[/下跌家数/,/下跌只数/,/decliners/i,/down_count/i]));
+   const lup=numericValue(namedMetric(data,[/涨停家数/,/涨停只数/,/limit.?up/i]));
+   const ldown=numericValue(namedMetric(data,[/跌停家数/,/跌停只数/,/limit.?down/i]));
+   if(adv!==null&&dec!==null&&dec>0){
+    const ratio=adv/dec;
+    mood.append(metric("上涨/下跌家数比",ratio.toFixed(2)+"倍"));
+    const label=ratio>=1.5?"广度偏暖（实验规则）":ratio<=0.67?"广度偏冷（实验规则）":"涨跌分化（实验规则）";
+    mood.append(metric("广度状态",label));
+    const li=document.createElement("li");li.textContent="实验规则：上涨家数/下跌家数 ≥1.5 记为广度偏暖，≤0.67 记为广度偏冷，其余记为分化。该阈值尚未经过历史样本验证，不构成买卖信号。";notes.appendChild(li);
+   }else{
+    const li=document.createElement("li");li.textContent="无法从返回字段中可靠识别上涨和下跌家数，市场广度状态暂不分类。";notes.appendChild(li);
+   }
+   if(lup!==null&&ldown!==null){mood.append(metric("涨停/跌停家数",String(lup)+" / "+String(ldown)));if(ldown>lup){const li=document.createElement("li");li.textContent="风险提示：接口识别到跌停家数高于涨停家数，需进一步核对统计范围与数据日期；不能仅凭此项决定仓位。";notes.appendChild(li);}}
+
    const ddate=dataDate(breadth);const li=document.createElement("li");li.textContent="当期市场广度接口成功；"+(shown?"识别并展示 "+shown+" 个关键字段。":"返回结构未匹配预设字段名，请查看原始摘要，不对字段做猜测映射。")+(ddate?" 接口日期字段 "+ddate.key+"："+ddate.value+"。":" 接口未识别到明确的数据日期，不能保证是当前交易日。");notes.appendChild(li);
   }else{const li=document.createElement("li");li.textContent="当期市场广度读取失败："+(breadth?.error||"未知错误")+"。本次不判断市场情绪。";notes.appendChild(li);}
   const overview=byName["市场总览"];

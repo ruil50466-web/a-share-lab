@@ -206,6 +206,7 @@ async function scanMarket(){
   const breadth=byName["当期涨跌分布"];
   if(breadth?.ok){
    const data=breadth.envelope.structured??breadth.data?.structured??breadth.data;
+   if(Array.isArray(data))data.forEach(row=>{if(row&&typeof row==="object"){const label=first(row,["name","名称","label","指标","title","项目","item","key"]);const value=first(row,["value","数值","count","数量","amount","值"]);if(label!==null&&value!==null&&metrics.children.length<12)metrics.append(metric(String(label),String(value)));}});
    const aliases=[
     ["上涨家数",[/上涨家数/,/上涨只数/,/advancers/i,/up_count/i]],
     ["下跌家数",[/下跌家数/,/下跌只数/,/decliners/i,/down_count/i]],
@@ -224,7 +225,7 @@ async function scanMarket(){
   }else{const li=document.createElement("li");li.textContent="市场总览读取失败："+(overview?.error||"未知错误")+"。";notes.appendChild(li);}
   const hot=byName["热门板块"];
   if(hot?.ok){
-   let list=Array.isArray(hot.data)?hot.data:(Array.isArray(hot.data?.items)?hot.data.items:Array.isArray(hot.data?.list)?hot.data.list:Array.isArray(hot.envelope.structured)?hot.envelope.structured:[]);
+   let list=Array.isArray(hot.data)?hot.data:(Array.isArray(hot.data?.items)?hot.data.items:Array.isArray(hot.data?.list)?hot.data.list:Array.isArray(hot.data?.structured)?hot.data.structured:Array.isArray(hot.envelope.structured)?hot.envelope.structured:[]);
    list.slice(0,10).forEach((item,i)=>{
     const tr=document.createElement("tr"),name=first(item,["name","名称","sector","板块","title","板块名称"])||"第"+(i+1)+"项",rank=first(item,["rank","排名","hot","heat","score","热度","pv"])??(i+1);
     const detail=Object.entries(item||{}).filter(([k,v])=>!(/name|名称|sector|板块|title|rank|排名/i.test(k))&&v!==null&&typeof v!=="object").slice(0,2).map(([k,v])=>k+": "+v).join("；")||"接口未提供更多可识别字段";

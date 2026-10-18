@@ -1,0 +1,25 @@
+name: Validate research data
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Check Python syntax
+        run: python -m py_compile scripts/analyze_signals.py scripts/validate_data.py
+      - name: Validate CSV templates
+        run: python scripts/validate_data.py
+      - name: Run descriptive analysis
+        run: python scripts/analyze_signals.py

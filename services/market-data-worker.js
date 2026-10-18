@@ -10,6 +10,7 @@
  * This is a research prototype, not an execution/trading system.
  */
 const UPSTREAM_HOSTS = [
+  "https://push2ex.eastmoney.com",
   "https://push2delay.eastmoney.com",
   "https://82.push2.eastmoney.com",
   "https://push2.eastmoney.com",

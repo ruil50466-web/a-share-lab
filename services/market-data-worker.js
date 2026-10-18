@@ -127,7 +127,15 @@ export default {
         },
         signal: AbortSignal.timeout(10000),
       });
-      if (!response.ok) return json({ error: "Upstream HTTP error", status: response.status }, 502);
+      if (!response.ok) {
+        const upstreamBody = await response.text().catch(() => "");
+        return json({
+          error: "Upstream HTTP error",
+          status: response.status,
+          statusText: response.statusText,
+          upstreamBody: upstreamBody.slice(0, 500),
+        }, 502);
+      }
       const payload = await response.json();
       if (payload?.rc !== 0 || !payload?.data?.diff) {
         return json({ error: "Unexpected upstream response", upstreamCode: payload?.rc ?? null }, 502);

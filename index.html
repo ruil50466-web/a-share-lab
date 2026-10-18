@@ -50,11 +50,11 @@ button{border:0;border-radius:10px;padding:12px 14px;font-weight:650;font-size:1
 </div>
 <div class="panel">
 <div class="history-head"><h2>④ 市场环境扫描</h2><div class="actions" style="margin-top:0"><button id="scanMarket">扫描市场</button><button class="secondary" id="copyMarket" disabled>复制市场材料</button></div></div>
-<p class="section-note">使用免费接口：市场总览、当期涨跌分布、热门板块。每次扫描最多请求3个接口，降低匿名限流风险；结果按接口实际字段展示。热门度不等于板块涨幅或主线。</p>
+<p class="section-note">使用免费接口：市场总览、当期涨跌分布、热门板块。每次扫描最多请求3个接口，降低匿名限流风险；结果按接口实际字段展示。板块涨幅不等于主线。</p>
 <p id="marketStatus" class="status">尚未扫描。扫描结果会标注接口返回的数据，不把热门度当作板块强度。</p>
 <div id="marketMetrics" class="metric-grid"></div>
 <h3 style="font-size:14px;margin:14px 0 6px">市场广度实验判断</h3><div id="marketMood" class="metric-grid"></div><p class="section-note">仅在接口字段能明确识别上涨/下跌家数时计算；阈值是待验证的研究规则，不是买卖信号。</p><h3 style="font-size:14px;margin:14px 0 6px">市场数据摘要</h3><ul id="marketNotes" class="bullet"></ul>
-<h3 style="font-size:14px;margin:14px 0 6px">热门板块（关注度，不是涨幅榜）</h3><div class="table-wrap"><table><thead><tr><th>板块/名称</th><th>热度/排名</th><th>接口返回信息</th></tr></thead><tbody id="hotSectorRows"></tbody></table></div>
+<h3 style="font-size:14px;margin:14px 0 6px">板块涨幅榜（涨幅不等于主线）</h3><div class="table-wrap"><table><thead><tr><th>板块/名称</th><th>热度/排名</th><th>接口返回信息</th></tr></thead><tbody id="hotSectorRows"></tbody></table></div>
 <div class="panel hidden" id="marketRawPanel"><strong>接口原始摘要（核对用）</strong><pre id="marketRaw" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--muted)"></pre></div>
 </div>
 <div class="panel">
@@ -62,7 +62,7 @@ button{border:0;border-radius:10px;padding:12px 14px;font-weight:650;font-size:1
 <p>1. 输入股票代码并查询。</p>
 <p>2. 查看数据质量与结构检查，再点“复制分析材料”。</p>
 <p>3. 将材料粘贴给 ChatGPT，继续核对板块强度、市场环境和交易失效条件。</p>
-<p class="small warning">当前已接入个股历史日线；市场环境扫描使用免费市场总览、涨跌分布和热门板块接口。热门板块代表热度，不等于涨幅排名或主线确认；涨停梯队与板块行情榜仍需额外数据源。</p>
+<p class="small warning">当前已接入个股历史日线；市场环境扫描使用免费市场总览、涨跌分布和热门板块接口。板块涨幅榜已接入 Worker；涨停梯队与指数/市场广度仍需核验数据源。</p>
 </div>
 </main>
 <script>
@@ -206,11 +206,11 @@ function numericValue(hit){if(!hit)return null;const n=Number(String(hit.value).
 async function scanMarket(){
  const btn=$("scanMarket"),status=$("marketStatus"),metrics=$("marketMetrics"),notes=$("marketNotes"),mood=$("marketMood"),rawPanel=$("marketRawPanel"),raw=$("marketRaw"),sectorRows=$("hotSectorRows");
  $("copyMarket").disabled=true;latestMarketScan=null;
- btn.disabled=true;status.textContent="正在读取市场总览、当期涨跌分布和热门板块…";metrics.replaceChildren();notes.replaceChildren();mood.replaceChildren();sectorRows.replaceChildren();rawPanel.classList.add("hidden");
+ btn.disabled=true;status.textContent="正在读取市场总览、当期涨跌分布和板块涨幅榜…";metrics.replaceChildren();notes.replaceChildren();mood.replaceChildren();sectorRows.replaceChildren();rawPanel.classList.add("hidden");
  const endpoints=[
   ["市场总览","https://api.ashareapi.com/v1/market-overview?type=summary"],
   ["当期涨跌分布","https://api.ashareapi.com/v1/changedist"],
-  ["热门板块","https://api.ashareapi.com/v1/hot?type=sector&limit=10"]
+  ["板块涨幅榜","https://hidden-moon-2e25.ruil50466.workers.dev/api/sectors?type=concept&limit=10"]
  ];
  try{
   const results=await Promise.all(endpoints.map(async ([label,url])=>{
@@ -253,17 +253,17 @@ async function scanMarket(){
    const ddate=dataDate(overview);const li=document.createElement("li");li.textContent="市场总览接口成功，数据来源："+overview.source+"。"+(ddate?"日期字段 "+ddate.key+"："+ddate.value+"。":"未识别到明确数据日期。")+"大盘画像不等于对明日涨跌的预测。";notes.appendChild(li);
    flattenPairs(overview.data).filter(([k,v])=>v!=="未提供"&&v.length<100).slice(0,6).forEach(([k,v])=>{if(metrics.children.length<12)metrics.append(metric("总览 / "+k,v));});
   }else{const li=document.createElement("li");li.textContent="市场总览读取失败："+(overview?.error||"未知错误")+"。";notes.appendChild(li);}
-  const hot=byName["热门板块"];
+  const hot=byName["板块涨幅榜"];
   if(hot?.ok){
-   let list=Array.isArray(hot.data)?hot.data:(Array.isArray(hot.data?.items)?hot.data.items:Array.isArray(hot.data?.list)?hot.data.list:Array.isArray(hot.data?.structured)?hot.data.structured:Array.isArray(hot.envelope.structured)?hot.envelope.structured:[]);
+   let list=Array.isArray(hot.envelope?.rows)?hot.envelope.rows:(Array.isArray(hot.data)?hot.data:(Array.isArray(hot.data?.items)?hot.data.items:Array.isArray(hot.data?.list)?hot.data.list:Array.isArray(hot.data?.structured)?hot.data.structured:Array.isArray(hot.envelope.structured)?hot.envelope.structured:[]));
    list.slice(0,10).forEach((item,i)=>{
     const tr=document.createElement("tr"),name=first(item,["name","名称","sector","板块","title","板块名称"])||"第"+(i+1)+"项",rank=first(item,["rank","排名","hot","heat","score","热度","pv"])??(i+1);
-    const detail=Object.entries(item||{}).filter(([k,v])=>!(/name|名称|sector|板块|title|rank|排名/i.test(k))&&v!==null&&typeof v!=="object").slice(0,2).map(([k,v])=>k+": "+v).join("；")||"接口未提供更多可识别字段";
+    const detail=Object.entries(item||{}).filter(([k,v])=>!(/name|名称|sector|板块|title|rank|排名|change_pct/i.test(k))&&v!==null&&typeof v!=="object").slice(0,3).map(([k,v])=>k+": "+v).join("；")||"接口未提供更多可识别字段";
     [String(name),String(rank),detail].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.appendChild(td)});sectorRows.appendChild(tr);
    });
-   const ddate=dataDate(hot);const li=document.createElement("li");li.textContent="热门板块接口成功（"+list.length+" 条可识别记录）。"+(ddate?"日期字段 "+ddate.key+"："+ddate.value+"。":"未识别到明确数据日期。")+"这是关注度/热度数据，不是板块涨幅榜；没有板块涨跌幅和成交额数据时，不认定主线。";notes.appendChild(li);
+   const ddate=dataDate(hot);const li=document.createElement("li");li.textContent="板块涨幅榜接口成功（"+list.length+" 条可识别记录）。"+(ddate?"日期字段 "+ddate.key+"："+ddate.value+"。":"未识别到明确数据日期。")+"这是板块涨幅排名，不是关注度/热度榜；涨幅排名也不等于主线确认。";notes.appendChild(li);
    if(!list.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="接口返回结构暂无法识别，请查看原始摘要。";tr.appendChild(td);sectorRows.appendChild(tr);}
-  }else{const li=document.createElement("li");li.textContent="热门板块读取失败："+(hot?.error||"未知错误")+"。";notes.appendChild(li);const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="本次没有可用的热门板块数据。";tr.appendChild(td);sectorRows.appendChild(tr);}
+  }else{const li=document.createElement("li");li.textContent="板块涨幅榜读取失败："+(hot?.error||"未知错误")+"。";notes.appendChild(li);const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="本次没有可用的热门板块数据。";tr.appendChild(td);sectorRows.appendChild(tr);}
   raw.textContent=JSON.stringify(results.map(r=>r.ok?{name:r.label,source:r.source,elapsed_ms:r.elapsed_ms,tier:r.tier,response:r.envelope}:{name:r.label,error:r.error}),null,2);rawPanel.classList.remove("hidden");
   latestMarketScan={scanned_at:new Date().toISOString(),success_count:success,results:results.map(r=>r.ok?{name:r.label,source:r.source,elapsed_ms:r.elapsed_ms,tier:r.tier,response:r.envelope}:{name:r.label,error:r.error})};$("copyMarket").disabled=false;
   status.textContent="扫描完成："+success+"/3 个接口成功。页面只展示接口实际返回内容；数据日期、口径及板块涨幅仍需核对。";status.classList.toggle("warning",success<4);
@@ -273,7 +273,7 @@ async function scanMarket(){
 $("scanMarket").addEventListener("click",scanMarket);
 $("copyMarket").addEventListener("click",async()=>{
  if(!latestMarketScan)return;
- const prompt="请作为严格的A股短线研究教练分析下面的市场环境扫描材料。\n1. 严格区分接口事实、计算结果、推断和未知项。\n2. 核对每个接口的数据日期、来源、字段和口径；不要把未知日期的数据当成今天。\n3. 涨跌家数用于市场广度；热门板块只代表关注度，不代表涨幅或主线。\n4. 只有在板块强度、持续性、扩散度和涨停梯队有证据时才讨论主线；缺失就明确暂不下结论。\n5. 给出下一步最少需要补的数据和观察/失效条件，不做确定性预测。\n\n市场材料：\n"+JSON.stringify(latestMarketScan,null,2);
+ const prompt="请作为严格的A股短线研究教练分析下面的市场环境扫描材料。\n1. 严格区分接口事实、计算结果、推断和未知项。\n2. 核对每个接口的数据日期、来源、字段和口径；不要把未知日期的数据当成今天。\n3. 涨跌家数用于市场广度；板块涨幅榜代表当次接口的涨幅排序，不代表主线确认。\n4. 只有在板块强度、持续性、扩散度和涨停梯队有证据时才讨论主线；缺失就明确暂不下结论。\n5. 给出下一步最少需要补的数据和观察/失效条件，不做确定性预测。\n\n市场材料：\n"+JSON.stringify(latestMarketScan,null,2);
  try{await navigator.clipboard.writeText(prompt);$("marketStatus").textContent="市场分析材料已复制，回到 ChatGPT 粘贴即可。";}
  catch(e){const ta=document.createElement("textarea");ta.value=prompt;document.body.appendChild(ta);ta.select();const ok=document.execCommand("copy");ta.remove();$("marketStatus").textContent=ok?"市场分析材料已复制，回到 ChatGPT 粘贴即可。":"自动复制失败，请检查浏览器剪贴板权限。";}
 });

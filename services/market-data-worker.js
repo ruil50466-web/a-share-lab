@@ -14,6 +14,7 @@ const FILTERS = {
   concept: "m:90+t:3+f:!50",
   industry: "m:90+t:2+f:!50",
 };
+const POOLS = { zt: "getTopicZTPool", broken: "getTopicZBPool", dt: "getTopicDTPool" };
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
@@ -33,8 +34,68 @@ export default {
     if (url.pathname === "/health") {
       return json({ ok: true, service: "a-share-lab", version: "0.1.0" });
     }
+    if (url.pathname === "/api/limit-ups") {
+      const type = url.searchParams.get("type") || "zt";
+      if (!Object.prototype.hasOwnProperty.call(POOLS, type)) {
+        return json({ error: "type must be zt, broken, or dt" }, 400);
+      }
+      const localDate = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" }).replaceAll("-", "");
+      const date = url.searchParams.get("date") || localDate;
+      if (!/^\\d{8}$/.test(date)) return json({ error: "date must be YYYYMMDD" }, 400);
+      const upstream = new URL("https://push2ex.eastmoney.com/" + POOLS[type]);
+      upstream.search = new URLSearchParams({
+        ut: "7eea3edcaed734bea9cbfc24409ed989",
+        dpt: "wz.ztzt",
+        Pageindex: "0",
+        pagesize: "200",
+        sort: "fbt:asc",
+        date,
+      }).toString();
+      try {
+        const response = await fetch(upstream.toString(), {
+          headers: {
+            "user-agent": "Mozilla/5.0 AShareLab/0.1",
+            "referer": "https://quote.eastmoney.com/",
+          },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok) return json({ error: "Upstream HTTP error", status: response.status }, 502);
+        const payload = await response.json();
+        if (payload?.rc !== 0) {
+          return json({ error: "Unexpected upstream response", upstreamCode: payload?.rc ?? null }, 502);
+        }
+        const pool = payload?.data?.pool || [];
+        const rows = pool.map((x) => ({
+          code: x.c ?? null,
+          name: x.n ?? null,
+          price: typeof x.p === "number" ? x.p / 1000 : null,
+          change_pct: x.zdp ?? null,
+          limit_days: x.lbc ?? null,
+          first_seal: x.fbt ?? null,
+          last_seal: x.lbt ?? null,
+          break_times: x.zbc ?? null,
+          turnover_pct: x.hs ?? null,
+          amount: x.amount ?? null,
+          industry: x.hybk ?? null,
+          limit_stat: x.zttj ?? null,
+        }));
+        return json({
+          ok: true,
+          source: "Eastmoney public limit-up pool endpoint",
+          type,
+          requested_date: date,
+          fetched_at: new Date().toISOString(),
+          count: rows.length,
+          note: rows.length === 0 ? "空列表可能是非交易日、日期无数据或上游变化，不能直接解读为当日零涨停。" : "requested_date 是查询日期；fetched_at 只是查询时间。",
+          rows,
+        });
+      } catch (error) {
+        return json({ error: "Limit-up pool request failed", detail: String(error?.message || error) }, 502);
+      }
+    }
+
     if (url.pathname !== "/api/sectors") {
-      return json({ error: "Not found", routes: ["/health", "/api/sectors?type=concept|industry"] }, 404);
+      return json({ error: "Not found", routes: ["/health", "/api/sectors?type=concept|industry", "/api/limit-ups?type=zt|broken|dt&date=YYYYMMDD"] }, 404);
     }
 
     const type = url.searchParams.get("type") || "concept";

@@ -49,11 +49,19 @@ button{border:0;border-radius:10px;padding:12px 14px;font-weight:650;font-size:1
 <div class="table-wrap"><table><thead><tr><th>日期</th><th>收盘</th><th>涨跌%</th><th>最高</th><th>最低</th><th>成交量</th><th>MA5</th><th>MA20</th></tr></thead><tbody id="historyRows"></tbody></table></div>
 </div>
 <div class="panel">
+<div class="history-head"><h2>④ 市场环境扫描</h2><button id="scanMarket">扫描市场</button></div>
+<p class="section-note">使用免费接口：市场总览、当期涨跌分布、热门板块。点击后才请求，避免不必要地消耗接口额度。</p>
+<p id="marketStatus" class="status">尚未扫描。扫描结果会标注接口返回的数据，不把热门度当作板块强度。</p>
+<div id="marketMetrics" class="metric-grid"></div>
+<div id="marketNotes" class="bullet"></div>
+<div class="panel hidden" id="marketRawPanel"><strong>接口原始摘要（核对用）</strong><pre id="marketRaw" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--muted)"></pre></div>
+</div>
+<div class="panel">
 <strong>怎么用</strong>
 <p>1. 输入股票代码并查询。</p>
 <p>2. 查看数据质量与结构检查，再点“复制分析材料”。</p>
 <p>3. 将材料粘贴给 ChatGPT，继续核对板块强度、市场环境和交易失效条件。</p>
-<p class="small warning">当前版本只有单只股票快照，没有历史K线、前日成交量、指数与板块数据，因此不能据此确认放量/缩量、均线支撑或主线地位。</p>
+<p class="small warning">当前已接入个股历史日线；市场环境扫描使用免费市场总览、涨跌分布和热门板块接口。热门板块代表热度，不等于涨幅排名或主线确认；涨停梯队与板块行情榜仍需额外数据源。</p>
 </div>
 </main>
 <script>
@@ -123,7 +131,7 @@ function render(data,envelope){
    noteArr.push("价格字段不完整或关系异常，跳过K线计算。");
  }
  noteArr.push(volume===null?"无成交量，不能判断放量/缩量。":"有成交量但缺少前一交易日同口径数据，不能判断放量或缩量。");
- noteArr.push("未接入历史K线、均线、指数、板块涨幅/成交额及涨停梯队，不能据此确认支撑压力、板块主线或买卖点。");
+ noteArr.push("历史日线已单独获取并计算均线与区间均量；仍缺少指数、板块涨幅/成交额及涨停梯队，不能据此确认主线或买卖点。");
  notes.replaceChildren(...noteArr.map(t=>{const li=document.createElement("li");li.textContent=t;return li}));
  $("qualityPanel").classList.remove("hidden");$("structurePanel").classList.remove("hidden");
  const source=first(envelope,["source","来源"])||"接口未注明";
@@ -168,6 +176,40 @@ async function loadHistory(code){
  }catch(e){latestHistory=null;const li=document.createElement("li");li.textContent="历史K线获取失败："+e.message+"。单股快照仍可查看，但暂不能做均线或相对量能分析。";notes.replaceChildren(li);if(report)report.history_error=e.message;}
 }
 
+async function scanMarket(){
+ const btn=$("scanMarket"),status=$("marketStatus"),metrics=$("marketMetrics"),notes=$("marketNotes"),rawPanel=$("marketRawPanel"),raw=$("marketRaw");
+ btn.disabled=true;status.textContent="正在读取市场总览、涨跌分布和热门板块…";metrics.replaceChildren();notes.replaceChildren();rawPanel.classList.add("hidden");
+ const endpoints=[
+  ["市场总览","https://api.ashareapi.com/v1/market-overview?type=summary"],
+  ["当期涨跌分布","https://api.ashareapi.com/v1/changedist"],
+  ["热门板块","https://api.ashareapi.com/v1/hot?type=sector"]
+ ];
+ try{
+  const results=await Promise.all(endpoints.map(async ([label,url])=>{
+   try{const res=await fetch(url,{headers:{Accept:"application/json"}});if(!res.ok)throw Error("HTTP "+res.status);const j=await res.json();if(j.ok===false)throw Error(j.message||j.error||"接口返回失败");return {label,url,ok:true,source:j.source||"接口未注明",data:j.data??j};}
+   catch(e){return {label,url,ok:false,error:e.message};}
+  }));
+  const success=results.filter(x=>x.ok).length;
+  results.forEach(r=>{
+   const li=document.createElement("li");
+   if(r.ok){
+    const data=Array.isArray(r.data)?r.data.slice(0,10):r.data;
+    li.textContent=r.label+"：已取得数据（来源："+r.source+"）。"+(r.label==="热门板块"?"注意：热度榜不是板块涨幅榜，不能单独认定主线。":"");
+    if(r.label==="当期涨跌分布"&&data&&typeof data==="object"&&!Array.isArray(data)){
+     const flat=[];Object.entries(data).forEach(([k,v])=>{if(v===null||typeof v!=="object")flat.push([k,String(v)]);});
+     flat.slice(0,8).forEach(([k,v])=>metrics.append(metric(k,v)));
+    }
+   }else li.textContent=r.label+"：读取失败（"+r.error+"）。";
+   notes.appendChild(li);
+  });
+  raw.textContent=JSON.stringify(results.map(r=>r.ok?{name:r.label,source:r.source,data:r.data}: {name:r.label,error:r.error}),null,2);
+  rawPanel.classList.remove("hidden");
+  status.textContent="扫描完成："+success+"/3 个接口成功。接口响应只代表本次取得的数据，更新时间与口径仍需核对。";
+  status.classList.toggle("warning",success<3);
+ }finally{btn.disabled=false;}
+}
+
+$("scanMarket").addEventListener("click",scanMarket);
 $("query").addEventListener("click",async()=>{
  $("status").textContent="正在查询…";$("status").classList.remove("warning");$("query").disabled=true;$("copy").disabled=true;
  try{

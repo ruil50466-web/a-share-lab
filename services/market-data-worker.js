@@ -128,7 +128,8 @@ export default {
       if (payload?.rc !== 0 || !payload?.data?.diff) {
         return json({ error: "Unexpected upstream response", upstreamCode: payload?.rc ?? null }, 502);
       }
-      const rows = payload.data.diff.map((x) => ({
+      const diff = Array.isArray(payload.data.diff) ? payload.data.diff : Object.values(payload.data.diff);
+      const rows = diff.map((x) => ({
         code: x.f12 ?? null,
         name: x.f14 ?? null,
         change_pct: x.f3 ?? null,

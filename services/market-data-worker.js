@@ -9,7 +9,11 @@
  *
  * This is a research prototype, not an execution/trading system.
  */
-const UPSTREAM = "https://push2.eastmoney.com/api/qt/clist/get";
+const UPSTREAM_HOSTS = [
+  "https://push2delay.eastmoney.com",
+  "https://82.push2.eastmoney.com",
+  "https://push2.eastmoney.com",
+];
 const FILTERS = {
   concept: "m:90+t:3+f:!50",
   industry: "m:90+t:2+f:!50",
@@ -113,8 +117,7 @@ export default {
     const rawLimit = Number(url.searchParams.get("limit") || 20);
     const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(50, Math.floor(rawLimit))) : 20;
 
-    const upstream = new URL(UPSTREAM);
-    upstream.search = new URLSearchParams({
+    const params = new URLSearchParams({
       pn: "1",
       pz: String(limit),
       po: "1",
@@ -127,22 +130,31 @@ export default {
     }).toString();
 
     try {
-      const response = await fetch(upstream.toString(), {
-        headers: {
-          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-          "referer": "https://quote.eastmoney.com/",
-          "accept": "application/json, text/plain, */*",
-        },
-        signal: AbortSignal.timeout(10000),
-      });
-      if (!response.ok) {
-        const upstreamBody = await response.text().catch(() => "");
-        return json({
-          error: "Upstream HTTP error",
-          status: response.status,
-          statusText: response.statusText,
-          upstreamBody: upstreamBody.slice(0, 500),
-        }, 502);
+      let response = null;
+      const attempts = [];
+      for (const host of UPSTREAM_HOSTS) {
+        const upstream = host + "/api/qt/clist/get?" + params;
+        try {
+          const candidate = await fetch(upstream, {
+            headers: {
+              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+              "referer": "https://quote.eastmoney.com/",
+              "accept": "application/json, text/plain, */*",
+            },
+            signal: AbortSignal.timeout(10000),
+          });
+          if (candidate.ok) {
+            response = candidate;
+            break;
+          }
+          const body = await candidate.text().catch(() => "");
+          attempts.push({ host, status: candidate.status, statusText: candidate.statusText, body: body.slice(0, 160) });
+        } catch (error) {
+          attempts.push({ host, error: String(error?.message || error) });
+        }
+      }
+      if (!response) {
+        return json({ error: "All Eastmoney hosts failed", attempts }, 502);
       }
       const payload = await response.json();
       if (payload?.rc !== 0 || !payload?.data?.diff) {

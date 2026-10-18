@@ -120,7 +120,11 @@ export default {
 
     try {
       const response = await fetch(upstream.toString(), {
-        headers: { "user-agent": "Mozilla/5.0 AShareLab/0.1" },
+        headers: {
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          "referer": "https://quote.eastmoney.com/",
+          "accept": "application/json, text/plain, */*",
+        },
         signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) return json({ error: "Upstream HTTP error", status: response.status }, 502);

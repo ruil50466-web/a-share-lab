@@ -50,10 +50,11 @@ button{border:0;border-radius:10px;padding:12px 14px;font-weight:650;font-size:1
 </div>
 <div class="panel">
 <div class="history-head"><h2>④ 市场环境扫描</h2><button id="scanMarket">扫描市场</button></div>
-<p class="section-note">使用免费接口：市场总览、当期涨跌分布、热门板块。点击后才请求，避免不必要地消耗接口额度。</p>
+<p class="section-note">使用免费接口：服务健康、市场总览、当期涨跌分布、热门板块。结果按接口实际字段展示；没有返回的指标不会猜填。热门度不等于板块涨幅或主线。</p>
 <p id="marketStatus" class="status">尚未扫描。扫描结果会标注接口返回的数据，不把热门度当作板块强度。</p>
 <div id="marketMetrics" class="metric-grid"></div>
-<ul id="marketNotes" class="bullet"></ul>
+<h3 style="font-size:14px;margin:14px 0 6px">市场数据摘要</h3><ul id="marketNotes" class="bullet"></ul>
+<h3 style="font-size:14px;margin:14px 0 6px">热门板块（关注度，不是涨幅榜）</h3><div class="table-wrap"><table><thead><tr><th>板块/名称</th><th>热度/排名</th><th>接口返回信息</th></tr></thead><tbody id="hotSectorRows"></tbody></table></div>
 <div class="panel hidden" id="marketRawPanel"><strong>接口原始摘要（核对用）</strong><pre id="marketRaw" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--muted)"></pre></div>
 </div>
 <div class="panel">
@@ -176,39 +177,69 @@ async function loadHistory(code){
  }catch(e){latestHistory=null;const li=document.createElement("li");li.textContent="历史K线获取失败："+e.message+"。单股快照仍可查看，但暂不能做均线或相对量能分析。";notes.replaceChildren(li);if(report)report.history_error=e.message;}
 }
 
+function flattenPairs(value,prefix="",out=[]){
+ if(value===null||value===undefined){out.push([prefix||"值","未提供"]);return out;}
+ if(Array.isArray(value)){value.slice(0,12).forEach((v,i)=>flattenPairs(v,prefix+"["+(i+1)+"]",out));return out;}
+ if(typeof value==="object"){Object.entries(value).slice(0,40).forEach(([k,v])=>flattenPairs(v,prefix?prefix+" / "+k:k,out));return out;}
+ out.push([prefix||"值",String(value)]);return out;
+}
+function firstMatch(obj,patterns){
+ const pairs=flattenPairs(obj);
+ for(const [k,v] of pairs){if(patterns.some(p=>p.test(k))&&v!=="未提供")return {key:k,value:v};}
+ return null;
+}
 async function scanMarket(){
- const btn=$("scanMarket"),status=$("marketStatus"),metrics=$("marketMetrics"),notes=$("marketNotes"),rawPanel=$("marketRawPanel"),raw=$("marketRaw");
- btn.disabled=true;status.textContent="正在读取市场总览、涨跌分布和热门板块…";metrics.replaceChildren();notes.replaceChildren();rawPanel.classList.add("hidden");
+ const btn=$("scanMarket"),status=$("marketStatus"),metrics=$("marketMetrics"),notes=$("marketNotes"),rawPanel=$("marketRawPanel"),raw=$("marketRaw"),sectorRows=$("hotSectorRows");
+ btn.disabled=true;status.textContent="正在读取服务状态、市场总览、当期涨跌分布和热门板块…";metrics.replaceChildren();notes.replaceChildren();sectorRows.replaceChildren();rawPanel.classList.add("hidden");
  const endpoints=[
+  ["服务健康","https://api.ashareapi.com/v1/health"],
   ["市场总览","https://api.ashareapi.com/v1/market-overview?type=summary"],
   ["当期涨跌分布","https://api.ashareapi.com/v1/changedist"],
-  ["热门板块","https://api.ashareapi.com/v1/hot?type=sector"]
+  ["热门板块","https://api.ashareapi.com/v1/hot?type=sector&limit=10"]
  ];
  try{
   const results=await Promise.all(endpoints.map(async ([label,url])=>{
-   try{const res=await fetch(url,{headers:{Accept:"application/json"}});if(!res.ok)throw Error("HTTP "+res.status);const j=await res.json();if(j.ok===false)throw Error(j.message||j.error||"接口返回失败");return {label,url,ok:true,source:j.source||"接口未注明",data:j.data??j};}
+   try{const res=await fetch(url,{headers:{Accept:"application/json"}});if(!res.ok)throw Error("HTTP "+res.status);const j=await res.json();if(j.ok===false)throw Error(j.message||j.error||"接口返回失败");return {label,url,ok:true,source:j.source||"接口未注明",elapsed_ms:j.elapsed_ms??null,tier:j.tier??null,envelope:j,data:j.data??j.structured??j};}
    catch(e){return {label,url,ok:false,error:e.message};}
   }));
-  const success=results.filter(x=>x.ok).length;
-  results.forEach(r=>{
-   const li=document.createElement("li");
-   if(r.ok){
-    const data=Array.isArray(r.data)?r.data.slice(0,10):r.data;
-    li.textContent=r.label+"：已取得数据（来源："+r.source+"）。"+(r.label==="热门板块"?"注意：热度榜不是板块涨幅榜，不能单独认定主线。":"");
-    if(r.label==="当期涨跌分布"&&data&&typeof data==="object"&&!Array.isArray(data)){
-     const flat=[];Object.entries(data).forEach(([k,v])=>{if(v===null||typeof v!=="object")flat.push([k,String(v)]);});
-     flat.slice(0,8).forEach(([k,v])=>metrics.append(metric(k,v)));
-    }
-   }else li.textContent=r.label+"：读取失败（"+r.error+"）。";
-   notes.appendChild(li);
-  });
-  raw.textContent=JSON.stringify(results.map(r=>r.ok?{name:r.label,source:r.source,data:r.data}: {name:r.label,error:r.error}),null,2);
-  rawPanel.classList.remove("hidden");
-  status.textContent="扫描完成："+success+"/3 个接口成功。接口响应只代表本次取得的数据，更新时间与口径仍需核对。";
-  status.classList.toggle("warning",success<3);
- }finally{btn.disabled=false;}
+  const success=results.filter(x=>x.ok).length, byName=Object.fromEntries(results.map(r=>[r.label,r]));
+  const health=byName["服务健康"];
+  {const li=document.createElement("li");li.textContent=health?.ok?"服务健康检查已返回；实际数据通道状态见原始摘要。":"服务健康检查失败："+(health?.error||"未知错误")+"。其他接口仍分别判断。";notes.appendChild(li);}
+  const breadth=byName["当期涨跌分布"];
+  if(breadth?.ok){
+   const data=breadth.envelope.structured??breadth.data?.structured??breadth.data;
+   const aliases=[
+    ["上涨家数",[/上涨家数/,/上涨只数/,/advancers/i,/up_count/i]],
+    ["下跌家数",[/下跌家数/,/下跌只数/,/decliners/i,/down_count/i]],
+    ["平盘家数",[/平盘家数/,/平盘只数/,/unchanged/i]],
+    ["涨停家数",[/涨停家数/,/涨停只数/,/limit.?up/i]],
+    ["跌停家数",[/跌停家数/,/跌停只数/,/limit.?down/i]],
+    ["市场成交额",[/成交额/,/turnover_amount/i]]
+   ];
+   let shown=0;aliases.forEach(([label,patterns])=>{const hit=firstMatch(data,patterns);if(hit){metrics.append(metric(label,hit.value));shown++;}});
+   const li=document.createElement("li");li.textContent="当期市场广度接口成功；"+(shown?"识别并展示 "+shown+" 个关键字段。":"返回结构未匹配预设字段名，请查看原始摘要，不对字段做猜测映射。")+" 仍需核对返回的数据日期。";notes.appendChild(li);
+  }else{const li=document.createElement("li");li.textContent="当期市场广度读取失败："+(breadth?.error||"未知错误")+"。本次不判断市场情绪。";notes.appendChild(li);}
+  const overview=byName["市场总览"];
+  if(overview?.ok){
+   const li=document.createElement("li");li.textContent="市场总览接口成功，数据来源："+overview.source+"。大盘画像不等于对明日涨跌的预测。";notes.appendChild(li);
+   flattenPairs(overview.data).filter(([k,v])=>v!=="未提供"&&v.length<100).slice(0,6).forEach(([k,v])=>{if(metrics.children.length<12)metrics.append(metric("总览 / "+k,v));});
+  }else{const li=document.createElement("li");li.textContent="市场总览读取失败："+(overview?.error||"未知错误")+"。";notes.appendChild(li);}
+  const hot=byName["热门板块"];
+  if(hot?.ok){
+   let list=Array.isArray(hot.data)?hot.data:(Array.isArray(hot.data?.items)?hot.data.items:Array.isArray(hot.data?.list)?hot.data.list:Array.isArray(hot.envelope.structured)?hot.envelope.structured:[]);
+   list.slice(0,10).forEach((item,i)=>{
+    const tr=document.createElement("tr"),name=first(item,["name","名称","sector","板块","title","板块名称"])||"第"+(i+1)+"项",rank=first(item,["rank","排名","hot","heat","score","热度","pv"])??(i+1);
+    const detail=Object.entries(item||{}).filter(([k,v])=>!(/name|名称|sector|板块|title|rank|排名/i.test(k))&&v!==null&&typeof v!=="object").slice(0,2).map(([k,v])=>k+": "+v).join("；")||"接口未提供更多可识别字段";
+    [String(name),String(rank),detail].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.appendChild(td)});sectorRows.appendChild(tr);
+   });
+   const li=document.createElement("li");li.textContent="热门板块接口成功（"+list.length+" 条可识别记录）。这是关注度/热度数据，不是板块涨幅榜；没有板块涨跌幅和成交额数据时，不认定主线。";notes.appendChild(li);
+   if(!list.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="接口返回结构暂无法识别，请查看原始摘要。";tr.appendChild(td);sectorRows.appendChild(tr);}
+  }else{const li=document.createElement("li");li.textContent="热门板块读取失败："+(hot?.error||"未知错误")+"。";notes.appendChild(li);const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="本次没有可用的热门板块数据。";tr.appendChild(td);sectorRows.appendChild(tr);}
+  raw.textContent=JSON.stringify(results.map(r=>r.ok?{name:r.label,source:r.source,elapsed_ms:r.elapsed_ms,tier:r.tier,response:r.envelope}:{name:r.label,error:r.error}),null,2);rawPanel.classList.remove("hidden");
+  status.textContent="扫描完成："+success+"/4 个接口成功。页面只展示接口实际返回内容；数据日期、口径及板块涨幅仍需核对。";status.classList.toggle("warning",success<4);
+ }catch(e){status.textContent="市场扫描异常："+e.message;status.classList.add("warning");}
+ finally{btn.disabled=false;}
 }
-
 $("scanMarket").addEventListener("click",scanMarket);
 $("query").addEventListener("click",async()=>{
  $("status").textContent="正在查询…";$("status").classList.remove("warning");$("query").disabled=true;$("copy").disabled=true;

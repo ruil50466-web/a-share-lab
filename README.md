@@ -23,6 +23,7 @@ A股短线研究与策略验证实验室。
 - `docs/historical_data_import.md`：历史数据导入与收益口径规范。
 - `scripts/analyze_signals.py`：基于标准库的样本描述性统计脚本。
 - `scripts/validate_data.py`：CSV字段、日期、数值与疑似重复记录检查。
+- `services/market-data-worker.js`：Cloudflare Worker 后端原型，支持行业/概念板块排行和涨停/炸板/跌停池；部署前端前须先完成部署与实测。
 
 ## 快速开始
 
@@ -63,7 +64,7 @@ python scripts/analyze_signals.py
 
 - 历史K线接口使用前复权价格；不要把它与复权口径未核实的快照价格直接混算。
 - 页面依赖外部数据服务和浏览器网络/CORS条件；接口失败时应显示失败，不能用模拟数据代替。
-- 当前市场扫描不包含完整行业/概念涨幅榜与涨停梯队；这两类能力需要额外可用的数据接口/授权。
+- 手机网页当前市场扫描仍不包含行业/概念涨幅榜与涨停梯队。仓库另有 `services/market-data-worker.js` 后端原型：已编写行业/概念板块排行，以及涨停池、炸板池、跌停池接口，但**尚未部署为公网服务，也尚未接入手机网页**。部署说明见 `docs/market_data_worker_deploy.md`。
 - 本页面是研究辅助工具，不提供确定性买卖信号。
 
 - 市场环境扫描：调用免费 `/v1/market-overview?type=summary`、`/v1/changedist`、`/v1/hot?type=sector&limit=10`；显示接口来源/可识别的数据日期、市场广度字段和热门板块列表，并提供“复制市场材料”。

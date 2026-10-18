@@ -221,20 +221,26 @@ async function scanMarket(){
   const breadth=byName["当期涨跌分布"];
   if(breadth?.ok){
    const data=breadth.envelope.structured??breadth.data?.structured??breadth.data;
-   if(Array.isArray(data))data.forEach(row=>{if(row&&typeof row==="object"){const label=first(row,["name","名称","label","指标","title","项目","item","key"]);const value=first(row,["value","数值","count","数量","amount","值"]);if(label!==null&&value!==null&&metrics.children.length<12)metrics.append(metric(String(label),String(value)));}});
-   const aliases=[
-    ["上涨家数",[/上涨家数/,/上涨只数/,/advancers/i,/up_count/i]],
-    ["下跌家数",[/下跌家数/,/下跌只数/,/decliners/i,/down_count/i]],
-    ["平盘家数",[/平盘家数/,/平盘只数/,/unchanged/i]],
-    ["涨停家数",[/涨停家数/,/涨停只数/,/limit.?up/i]],
-    ["跌停家数",[/跌停家数/,/跌停只数/,/limit.?down/i]],
-    ["市场成交额",[/成交额/,/turnover_amount/i]]
+   const breadthRow=Array.isArray(data)?data.find(row=>row&&typeof row==="object"&&(first(row,["上涨","上涨家数","advancers"])!==null||first(row,["下跌","下跌家数","decliners"])!==null)):data;
+   const field=(keys)=>first(breadthRow,keys);
+   const explicitFields=[
+    ["上涨家数",["上涨","上涨家数","上涨只数","advancers","up_count"]],
+    ["上涨占比",["上涨占比","上涨比例","advance_ratio"]],
+    ["下跌家数",["下跌","下跌家数","下跌只数","decliners","down_count"]],
+    ["停牌家数",["停牌","停牌家数","suspended"]],
+    ["平盘家数",["平盘","平盘家数","unchanged"]],
+    ["涨停家数",["涨停","涨停家数","涨停只数","limit_up"]],
+    ["跌停家数",["跌停","跌停家数","跌停只数","limit_down"]]
    ];
-   let shown=0;aliases.forEach(([label,patterns])=>{const hit=namedMetric(data,patterns);if(hit){metrics.append(metric(label,hit.value));shown++;}});
-   const adv=numericValue(namedMetric(data,[/上涨家数/,/上涨只数/,/advancers/i,/up_count/i]));
-   const dec=numericValue(namedMetric(data,[/下跌家数/,/下跌只数/,/decliners/i,/down_count/i]));
-   const lup=numericValue(namedMetric(data,[/涨停家数/,/涨停只数/,/limit.?up/i]));
-   const ldown=numericValue(namedMetric(data,[/跌停家数/,/跌停只数/,/limit.?down/i]));
+   let shown=0;
+   explicitFields.forEach(([label,keys])=>{const value=field(keys);if(value!==null){metrics.append(metric(label,String(value)));shown++;}});
+   const markdown=String(breadth.envelope?.data??"");
+   const amountMatch=markdown.match(/两市成交额\s*[：:]\s*([\d,.]+)\s*亿/);
+   if(amountMatch){metrics.append(metric("两市成交额",amountMatch[1]+"亿元"));shown++;}
+   const adv=numericValue({value:field(["上涨","上涨家数","上涨只数","advancers","up_count"])});
+   const dec=numericValue({value:field(["下跌","下跌家数","下跌只数","decliners","down_count"])});
+   const lup=numericValue({value:field(["涨停","涨停家数","涨停只数","limit_up"])});
+   const ldown=numericValue({value:field(["跌停","跌停家数","跌停只数","limit_down"])});
    if(adv!==null&&dec!==null&&dec>0){
     const ratio=adv/dec;
     mood.append(metric("上涨/下跌家数比",ratio.toFixed(2)+"倍"));
@@ -250,16 +256,22 @@ async function scanMarket(){
   }else{const li=document.createElement("li");li.textContent="当期市场广度读取失败："+(breadth?.error||"未知错误")+"。本次不判断市场情绪。";notes.appendChild(li);}
   const overview=byName["市场总览"];
   if(overview?.ok){
-   const ddate=dataDate(overview);const li=document.createElement("li");li.textContent="市场总览接口成功，数据来源："+overview.source+"。"+(ddate?"日期字段 "+ddate.key+"："+ddate.value+"。":"未识别到明确数据日期。")+"大盘画像不等于对明日涨跌的预测。";notes.appendChild(li);
-   flattenPairs(overview.data).filter(([k,v])=>v!=="未提供"&&v.length<100).slice(0,6).forEach(([k,v])=>{if(metrics.children.length<12)metrics.append(metric("总览 / "+k,v));});
+   const overviewText=String(overview.envelope?.data??"");
+   const overviewDate=overviewText.match(/数据日期\s*[\x60]?([0-9]{4}-[0-9]{2}-[0-9]{2})/);
+   const ddate=dataDate(overview);const li=document.createElement("li");li.textContent="市场总览接口成功，数据来源："+overview.source+"。"+(overviewDate?"报告文本中的数据日期："+overviewDate[1]+"。":ddate?"日期字段 "+ddate.key+"："+ddate.value+"。":"未识别到明确数据日期。")+"大盘画像不等于对明日涨跌的预测。";notes.appendChild(li);
+   if(overviewDate)metrics.append(metric("市场总览数据日期",overviewDate[1]));
+   const dimensions=Array.isArray(overview.envelope?.structured)?overview.envelope.structured:[];
+   dimensions.slice(0,5).forEach(item=>{const label=first(item,["维度","指标","name","名称"]);const state=first(item,["状态","state"]);const score=first(item,["得分","score"]);if(label!==null&&metrics.children.length<12)metrics.append(metric(String(label),String(state??"")+(score!==null?"（得分 "+score+"）":"")));});
   }else{const li=document.createElement("li");li.textContent="市场总览读取失败："+(overview?.error||"未知错误")+"。";notes.appendChild(li);}
   const hot=byName["板块涨幅榜"];
   if(hot?.ok){
    let list=Array.isArray(hot.envelope?.rows)?hot.envelope.rows:(Array.isArray(hot.data)?hot.data:(Array.isArray(hot.data?.items)?hot.data.items:Array.isArray(hot.data?.list)?hot.data.list:Array.isArray(hot.data?.structured)?hot.data.structured:Array.isArray(hot.envelope.structured)?hot.envelope.structured:[]));
    list.slice(0,10).forEach((item,i)=>{
-    const tr=document.createElement("tr"),name=first(item,["name","名称","sector","板块","title","板块名称"])||"第"+(i+1)+"项",rank=first(item,["rank","排名","hot","heat","score","热度","pv"])??(i+1);
-    const detail=Object.entries(item||{}).filter(([k,v])=>!(/name|名称|sector|板块|title|rank|排名|change_pct/i.test(k))&&v!==null&&typeof v!=="object").slice(0,3).map(([k,v])=>k+": "+v).join("；")||"接口未提供更多可识别字段";
-    [String(name),String(rank),detail].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.appendChild(td)});sectorRows.appendChild(tr);
+    const tr=document.createElement("tr"),name=first(item,["name","名称","sector","板块","title","板块名称"])||"第"+(i+1)+"项";
+    const pct=num(item,["change_pct","涨幅","涨跌幅","pct_chg"]);
+    const pctText=pct===null?"未提供":(pct>0?"+":"")+pct.toFixed(2)+"%";
+    const detail=Object.entries(item||{}).filter(([k,v])=>!(/name|名称|sector|板块|title|rank|排名|change_pct|涨幅|涨跌幅/i.test(k))&&v!==null&&typeof v!=="object").slice(0,4).map(([k,v])=>k+": "+(k==="turnover_amount"&&Number.isFinite(Number(v))?(Number(v)/1e8).toFixed(2)+"亿元":v)).join("；")||"接口未提供更多可识别字段";
+    [String(name),pctText,detail].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.appendChild(td)});sectorRows.appendChild(tr);
    });
    const ddate=dataDate(hot);const li=document.createElement("li");li.textContent="板块涨幅榜接口成功（"+list.length+" 条可识别记录）。"+(ddate?"日期字段 "+ddate.key+"："+ddate.value+"。":"未识别到明确数据日期。")+"这是板块涨幅排名，不是关注度/热度榜；涨幅排名也不等于主线确认。";notes.appendChild(li);
    if(!list.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="接口返回结构暂无法识别，请查看原始摘要。";tr.appendChild(td);sectorRows.appendChild(tr);}

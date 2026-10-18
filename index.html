@@ -49,7 +49,7 @@ button{border:0;border-radius:10px;padding:12px 14px;font-weight:650;font-size:1
 <div class="table-wrap"><table><thead><tr><th>日期</th><th>收盘</th><th>涨跌%</th><th>最高</th><th>最低</th><th>成交量</th><th>MA5</th><th>MA20</th></tr></thead><tbody id="historyRows"></tbody></table></div>
 </div>
 <div class="panel">
-<div class="history-head"><h2>④ 市场环境扫描</h2><button id="scanMarket">扫描市场</button></div>
+<div class="history-head"><h2>④ 市场环境扫描</h2><div class="actions" style="margin-top:0"><button id="scanMarket">扫描市场</button><button class="secondary" id="copyMarket" disabled>复制市场材料</button></div></div>
 <p class="section-note">使用免费接口：市场总览、当期涨跌分布、热门板块。每次扫描最多请求3个接口，降低匿名限流风险；结果按接口实际字段展示。热门度不等于板块涨幅或主线。</p>
 <p id="marketStatus" class="status">尚未扫描。扫描结果会标注接口返回的数据，不把热门度当作板块强度。</p>
 <div id="marketMetrics" class="metric-grid"></div>
@@ -67,7 +67,7 @@ button{border:0;border-radius:10px;padding:12px 14px;font-weight:650;font-size:1
 </main>
 <script>
 const $=id=>document.getElementById(id);
-let latest=null, latestEnvelope=null, report=null, latestHistory=null;
+let latest=null, latestEnvelope=null, report=null, latestHistory=null, latestMarketScan=null;
 function first(o,keys){for(const k of keys){if(o&&o[k]!==undefined&&o[k]!==null&&o[k]!=="")return o[k]}return null}
 function fmt(v,digits=4){if(v===null||v===undefined||v==="")return "未提供";const n=Number(v);if(typeof v==="number"||String(v).trim()!==""&&Number.isFinite(n))return n.toLocaleString("zh-CN",{maximumFractionDigits:digits});return String(v)}
 function num(o,keys){const v=first(o,keys);if(v===null)return null;const n=Number(String(v).replace(/[,，%￥¥\s]/g,""));return Number.isFinite(n)?n:null}
@@ -190,6 +190,7 @@ function firstMatch(obj,patterns){
 }
 async function scanMarket(){
  const btn=$("scanMarket"),status=$("marketStatus"),metrics=$("marketMetrics"),notes=$("marketNotes"),rawPanel=$("marketRawPanel"),raw=$("marketRaw"),sectorRows=$("hotSectorRows");
+ $("copyMarket").disabled=true;latestMarketScan=null;
  btn.disabled=true;status.textContent="正在读取市场总览、当期涨跌分布和热门板块…";metrics.replaceChildren();notes.replaceChildren();sectorRows.replaceChildren();rawPanel.classList.add("hidden");
  const endpoints=[
   ["市场总览","https://api.ashareapi.com/v1/market-overview?type=summary"],
@@ -233,11 +234,18 @@ async function scanMarket(){
    if(!list.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="接口返回结构暂无法识别，请查看原始摘要。";tr.appendChild(td);sectorRows.appendChild(tr);}
   }else{const li=document.createElement("li");li.textContent="热门板块读取失败："+(hot?.error||"未知错误")+"。";notes.appendChild(li);const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="本次没有可用的热门板块数据。";tr.appendChild(td);sectorRows.appendChild(tr);}
   raw.textContent=JSON.stringify(results.map(r=>r.ok?{name:r.label,source:r.source,elapsed_ms:r.elapsed_ms,tier:r.tier,response:r.envelope}:{name:r.label,error:r.error}),null,2);rawPanel.classList.remove("hidden");
+  latestMarketScan={scanned_at:new Date().toISOString(),success_count:success,results:results.map(r=>r.ok?{name:r.label,source:r.source,elapsed_ms:r.elapsed_ms,tier:r.tier,response:r.envelope}:{name:r.label,error:r.error})};$("copyMarket").disabled=false;
   status.textContent="扫描完成："+success+"/3 个接口成功。页面只展示接口实际返回内容；数据日期、口径及板块涨幅仍需核对。";status.classList.toggle("warning",success<4);
  }catch(e){status.textContent="市场扫描异常："+e.message;status.classList.add("warning");}
  finally{btn.disabled=false;}
 }
 $("scanMarket").addEventListener("click",scanMarket);
+$("copyMarket").addEventListener("click",async()=>{
+ if(!latestMarketScan)return;
+ const prompt="请作为严格的A股短线研究教练分析下面的市场环境扫描材料。\n1. 严格区分接口事实、计算结果、推断和未知项。\n2. 核对每个接口的数据日期、来源、字段和口径；不要把未知日期的数据当成今天。\n3. 涨跌家数用于市场广度；热门板块只代表关注度，不代表涨幅或主线。\n4. 只有在板块强度、持续性、扩散度和涨停梯队有证据时才讨论主线；缺失就明确暂不下结论。\n5. 给出下一步最少需要补的数据和观察/失效条件，不做确定性预测。\n\n市场材料：\n"+JSON.stringify(latestMarketScan,null,2);
+ try{await navigator.clipboard.writeText(prompt);$("marketStatus").textContent="市场分析材料已复制，回到 ChatGPT 粘贴即可。";}
+ catch(e){const ta=document.createElement("textarea");ta.value=prompt;document.body.appendChild(ta);ta.select();const ok=document.execCommand("copy");ta.remove();$("marketStatus").textContent=ok?"市场分析材料已复制，回到 ChatGPT 粘贴即可。":"自动复制失败，请检查浏览器剪贴板权限。";}
+});
 $("query").addEventListener("click",async()=>{
  $("status").textContent="正在查询…";$("status").classList.remove("warning");$("query").disabled=true;$("copy").disabled=true;
  try{

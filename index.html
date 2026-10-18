@@ -12,7 +12,7 @@ main{max-width:760px;margin:auto;padding:20px 16px 36px}h1{font-size:24px;margin
 label{display:block;font-size:14px;color:var(--muted);margin-bottom:6px}input{width:100%;padding:14px;border:1px solid var(--line);border-radius:10px;background:#0b1422;color:var(--text);font-size:18px}
 button{border:0;border-radius:10px;padding:12px 14px;font-weight:650;font-size:15px;background:var(--accent);color:#07111f;cursor:pointer}.secondary{background:#24354b;color:var(--text)}button:disabled{opacity:.5;cursor:wait}.actions{display:flex;gap:8px;margin-top:10px}.actions button{flex:1}
 .row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}.key{color:var(--muted)}.value{font-variant-numeric:tabular-nums;text-align:right;overflow-wrap:anywhere;max-width:65%}
-.price{font-size:32px;font-weight:750;letter-spacing:-.5px}.up{color:#ff6b75}.down{color:#4bd6a0}.status{font-size:13px;overflow-wrap:anywhere}.small{font-size:12px}.hidden{display:none}.warning{color:var(--warn)}.good{color:#77ddb4}.tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:3px 9px;margin:4px 5px 4px 0;font-size:12px}.metric-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric{background:#0b1422;border:1px solid var(--line);border-radius:10px;padding:10px}.metric .k{font-size:12px;color:var(--muted)}.metric .v{font-size:16px;font-weight:700;overflow-wrap:anywhere}.section-note{font-size:13px}.bullet{margin:7px 0;padding-left:18px;color:var(--muted)}.bullet li{margin:5px 0}.footer{font-size:12px;margin-top:12px}
+.price{font-size:32px;font-weight:750;letter-spacing:-.5px}.up{color:#ff6b75}.down{color:#4bd6a0}.status{font-size:13px;overflow-wrap:anywhere}.small{font-size:12px}.hidden{display:none}.warning{color:var(--warn)}.good{color:#77ddb4}.tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:3px 9px;margin:4px 5px 4px 0;font-size:12px}.metric-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric{background:#0b1422;border:1px solid var(--line);border-radius:10px;padding:10px}.metric .k{font-size:12px;color:var(--muted)}.metric .v{font-size:16px;font-weight:700;overflow-wrap:anywhere}.section-note{font-size:13px}.bullet{margin:7px 0;padding-left:18px;color:var(--muted)}.bullet li{margin:5px 0}.footer{font-size:12px;margin-top:12px}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600}th:first-child,td:first-child{text-align:left}.history-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.history-head button{padding:8px 10px;font-size:12px}
 </style>
 </head>
 <body><main>
@@ -51,7 +51,7 @@ button{border:0;border-radius:10px;padding:12px 14px;font-weight:650;font-size:1
 </main>
 <script>
 const $=id=>document.getElementById(id);
-let latest=null, latestEnvelope=null, report=null;
+let latest=null, latestEnvelope=null, report=null, latestHistory=null;
 function first(o,keys){for(const k of keys){if(o&&o[k]!==undefined&&o[k]!==null&&o[k]!=="")return o[k]}return null}
 function fmt(v,digits=4){if(v===null||v===undefined||v==="")return "未提供";const n=Number(v);if(typeof v==="number"||String(v).trim()!==""&&Number.isFinite(n))return n.toLocaleString("zh-CN",{maximumFractionDigits:digits});return String(v)}
 function num(o,keys){const v=first(o,keys);if(v===null)return null;const n=Number(String(v).replace(/[,，%￥¥\s]/g,""));return Number.isFinite(n)?n:null}
@@ -140,9 +140,9 @@ $("copy").addEventListener("click",async()=>{
  if(!latest||!report)return;
  const payload={
   stock_code:$("code").value,stock_name:first(latest,["name","名称","stock_name","股票名称","股票简称"])||null,
-  raw_quote:latest,quality_checks:report.quality,calculated_structure:report.structure,
+  raw_quote:latest,quality_checks:report.quality,calculated_structure:report.structure,\n  historical_daily_bars:latestHistory||null,historical_analysis:report.history||null,historical_data_error:report.history_error||null,
   known_data:{trade_date:report.tradeDate,update_time:report.update,open:report.open,high:report.high,low:report.low,last:report.last,change_percent:report.change,volume:report.volume,amount:report.amount},
-  missing_or_unverified:["行情更新时间与实际延迟未独立验证","成交量/成交额字段单位未验证","缺少前一交易日同口径量价，不能判断放量或缩量","缺少历史K线与均线，不能验证支撑压力","缺少指数、行业/概念板块、涨停梯队和市场广度，不能确认主线","未提供的信息不得猜测或编造"]
+  missing_or_unverified:["行情更新时间与实际延迟未独立验证","快照成交量/成交额单位与复权口径需核实","历史K线接口为前复权口径，不能与口径未知的快照价格直接混算","仍缺少指数、行业/概念板块、涨停梯队和市场广度，不能确认主线","未提供的信息不得猜测或编造"]
  };
  const prompt="请作为严格的A股短线研究教练分析下面这份行情材料。要求：\n1. 严格区分接口事实、计算结果、推断和未知项；不得把单只股票快照包装成板块主线结论。\n2. 先检查日期、更新时间、字段完整性和单位风险；不确定就明确写不确定。\n3. 分析单日K线结构，但若缺少历史数据，不得声称放量/缩量、站上均线或获得支撑。\n4. 给出下一步需要补充的最少数据、观察条件和失效条件；数据不足时明确说暂不下结论。\n5. 不给无依据的目标价或确定性预测。\n\n行情材料：\n"+JSON.stringify(payload,null,2);
  try{await navigator.clipboard.writeText(prompt);$("status").textContent="分析材料已复制。回到 ChatGPT 粘贴即可。"}

@@ -50,7 +50,7 @@ button{border:0;border-radius:10px;padding:12px 14px;font-weight:650;font-size:1
 </div>
 <div class="panel">
 <div class="history-head"><h2>④ 市场环境扫描</h2><button id="scanMarket">扫描市场</button></div>
-<p class="section-note">使用免费接口：服务健康、市场总览、当期涨跌分布、热门板块。结果按接口实际字段展示；没有返回的指标不会猜填。热门度不等于板块涨幅或主线。</p>
+<p class="section-note">使用免费接口：市场总览、当期涨跌分布、热门板块。每次扫描最多请求3个接口，降低匿名限流风险；结果按接口实际字段展示。热门度不等于板块涨幅或主线。</p>
 <p id="marketStatus" class="status">尚未扫描。扫描结果会标注接口返回的数据，不把热门度当作板块强度。</p>
 <div id="marketMetrics" class="metric-grid"></div>
 <h3 style="font-size:14px;margin:14px 0 6px">市场数据摘要</h3><ul id="marketNotes" class="bullet"></ul>
@@ -190,9 +190,8 @@ function firstMatch(obj,patterns){
 }
 async function scanMarket(){
  const btn=$("scanMarket"),status=$("marketStatus"),metrics=$("marketMetrics"),notes=$("marketNotes"),rawPanel=$("marketRawPanel"),raw=$("marketRaw"),sectorRows=$("hotSectorRows");
- btn.disabled=true;status.textContent="正在读取服务状态、市场总览、当期涨跌分布和热门板块…";metrics.replaceChildren();notes.replaceChildren();sectorRows.replaceChildren();rawPanel.classList.add("hidden");
+ btn.disabled=true;status.textContent="正在读取市场总览、当期涨跌分布和热门板块…";metrics.replaceChildren();notes.replaceChildren();sectorRows.replaceChildren();rawPanel.classList.add("hidden");
  const endpoints=[
-  ["服务健康","https://api.ashareapi.com/v1/health"],
   ["市场总览","https://api.ashareapi.com/v1/market-overview?type=summary"],
   ["当期涨跌分布","https://api.ashareapi.com/v1/changedist"],
   ["热门板块","https://api.ashareapi.com/v1/hot?type=sector&limit=10"]
@@ -203,8 +202,6 @@ async function scanMarket(){
    catch(e){return {label,url,ok:false,error:e.message};}
   }));
   const success=results.filter(x=>x.ok).length, byName=Object.fromEntries(results.map(r=>[r.label,r]));
-  const health=byName["服务健康"];
-  {const li=document.createElement("li");li.textContent=health?.ok?"服务健康检查已返回；实际数据通道状态见原始摘要。":"服务健康检查失败："+(health?.error||"未知错误")+"。其他接口仍分别判断。";notes.appendChild(li);}
   const breadth=byName["当期涨跌分布"];
   if(breadth?.ok){
    const data=breadth.envelope.structured??breadth.data?.structured??breadth.data;
@@ -236,7 +233,7 @@ async function scanMarket(){
    if(!list.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="接口返回结构暂无法识别，请查看原始摘要。";tr.appendChild(td);sectorRows.appendChild(tr);}
   }else{const li=document.createElement("li");li.textContent="热门板块读取失败："+(hot?.error||"未知错误")+"。";notes.appendChild(li);const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="本次没有可用的热门板块数据。";tr.appendChild(td);sectorRows.appendChild(tr);}
   raw.textContent=JSON.stringify(results.map(r=>r.ok?{name:r.label,source:r.source,elapsed_ms:r.elapsed_ms,tier:r.tier,response:r.envelope}:{name:r.label,error:r.error}),null,2);rawPanel.classList.remove("hidden");
-  status.textContent="扫描完成："+success+"/4 个接口成功。页面只展示接口实际返回内容；数据日期、口径及板块涨幅仍需核对。";status.classList.toggle("warning",success<4);
+  status.textContent="扫描完成："+success+"/3 个接口成功。页面只展示接口实际返回内容；数据日期、口径及板块涨幅仍需核对。";status.classList.toggle("warning",success<4);
  }catch(e){status.textContent="市场扫描异常："+e.message;status.classList.add("warning");}
  finally{btn.disabled=false;}
 }

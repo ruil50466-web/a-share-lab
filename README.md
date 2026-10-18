@@ -19,15 +19,15 @@ A股短线研究与策略验证实验室。
 - `data/templates/stock_signals.csv`：个股信号与后续表现模板。
 - `docs/data_dictionary.md`：字段口径和记录规范。
 - `docs/strategy_rules.md`：待验证策略假设与验证纪律。
-- `docs/how_to_run.md`：统计脚本使用说明。
-- `scripts/analyze_signals.py`：基于标准库的样本描述性统计脚本。
+- `docs/how_to_run.md`：统计脚本使用说明。\n- `docs/historical_data_import.md`：历史数据导入与收益口径规范。
+- `scripts/analyze_signals.py`：基于标准库的样本描述性统计脚本。\n- `scripts/validate_data.py`：CSV字段、日期、数值与疑似重复记录检查。
 
 ## 快速开始
 
 在仓库根目录运行：
 
 ```bash
-python scripts/analyze_signals.py
+python scripts/validate_data.py\npython scripts/analyze_signals.py
 ```
 
 脚本默认读取 `data/templates/stock_signals.csv`。也可以把已填写的 CSV 路径作为第一个参数传入。当前脚本做描述性统计，不是完整可成交回测。

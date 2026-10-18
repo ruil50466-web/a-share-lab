@@ -188,6 +188,7 @@ function firstMatch(obj,patterns){
  for(const [k,v] of pairs){if(patterns.some(p=>p.test(k))&&v!=="未提供")return {key:k,value:v};}
  return null;
 }
+function dataDate(result){if(!result?.ok)return null;return firstMatch(result.envelope?.data??result.data,[/trade.?date/i,/data.?date/i,/日期/,/as.?of/i,/updated.?at/i,/timestamp/i]);}
 async function scanMarket(){
  const btn=$("scanMarket"),status=$("marketStatus"),metrics=$("marketMetrics"),notes=$("marketNotes"),rawPanel=$("marketRawPanel"),raw=$("marketRaw"),sectorRows=$("hotSectorRows");
  $("copyMarket").disabled=true;latestMarketScan=null;
@@ -216,11 +217,11 @@ async function scanMarket(){
     ["市场成交额",[/成交额/,/turnover_amount/i]]
    ];
    let shown=0;aliases.forEach(([label,patterns])=>{const hit=firstMatch(data,patterns);if(hit){metrics.append(metric(label,hit.value));shown++;}});
-   const li=document.createElement("li");li.textContent="当期市场广度接口成功；"+(shown?"识别并展示 "+shown+" 个关键字段。":"返回结构未匹配预设字段名，请查看原始摘要，不对字段做猜测映射。")+" 仍需核对返回的数据日期。";notes.appendChild(li);
+   const ddate=dataDate(breadth);const li=document.createElement("li");li.textContent="当期市场广度接口成功；"+(shown?"识别并展示 "+shown+" 个关键字段。":"返回结构未匹配预设字段名，请查看原始摘要，不对字段做猜测映射。")+(ddate?" 接口日期字段 "+ddate.key+"："+ddate.value+"。":" 接口未识别到明确的数据日期，不能保证是当前交易日。");notes.appendChild(li);
   }else{const li=document.createElement("li");li.textContent="当期市场广度读取失败："+(breadth?.error||"未知错误")+"。本次不判断市场情绪。";notes.appendChild(li);}
   const overview=byName["市场总览"];
   if(overview?.ok){
-   const li=document.createElement("li");li.textContent="市场总览接口成功，数据来源："+overview.source+"。大盘画像不等于对明日涨跌的预测。";notes.appendChild(li);
+   const ddate=dataDate(overview);const li=document.createElement("li");li.textContent="市场总览接口成功，数据来源："+overview.source+"。"+(ddate?"日期字段 "+ddate.key+"："+ddate.value+"。":"未识别到明确数据日期。")+"大盘画像不等于对明日涨跌的预测。";notes.appendChild(li);
    flattenPairs(overview.data).filter(([k,v])=>v!=="未提供"&&v.length<100).slice(0,6).forEach(([k,v])=>{if(metrics.children.length<12)metrics.append(metric("总览 / "+k,v));});
   }else{const li=document.createElement("li");li.textContent="市场总览读取失败："+(overview?.error||"未知错误")+"。";notes.appendChild(li);}
   const hot=byName["热门板块"];
@@ -231,7 +232,7 @@ async function scanMarket(){
     const detail=Object.entries(item||{}).filter(([k,v])=>!(/name|名称|sector|板块|title|rank|排名/i.test(k))&&v!==null&&typeof v!=="object").slice(0,2).map(([k,v])=>k+": "+v).join("；")||"接口未提供更多可识别字段";
     [String(name),String(rank),detail].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.appendChild(td)});sectorRows.appendChild(tr);
    });
-   const li=document.createElement("li");li.textContent="热门板块接口成功（"+list.length+" 条可识别记录）。这是关注度/热度数据，不是板块涨幅榜；没有板块涨跌幅和成交额数据时，不认定主线。";notes.appendChild(li);
+   const ddate=dataDate(hot);const li=document.createElement("li");li.textContent="热门板块接口成功（"+list.length+" 条可识别记录）。"+(ddate?"日期字段 "+ddate.key+"："+ddate.value+"。":"未识别到明确数据日期。")+"这是关注度/热度数据，不是板块涨幅榜；没有板块涨跌幅和成交额数据时，不认定主线。";notes.appendChild(li);
    if(!list.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="接口返回结构暂无法识别，请查看原始摘要。";tr.appendChild(td);sectorRows.appendChild(tr);}
   }else{const li=document.createElement("li");li.textContent="热门板块读取失败："+(hot?.error||"未知错误")+"。";notes.appendChild(li);const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.textContent="本次没有可用的热门板块数据。";tr.appendChild(td);sectorRows.appendChild(tr);}
   raw.textContent=JSON.stringify(results.map(r=>r.ok?{name:r.label,source:r.source,elapsed_ms:r.elapsed_ms,tier:r.tier,response:r.envelope}:{name:r.label,error:r.error}),null,2);rawPanel.classList.remove("hidden");

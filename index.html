@@ -53,7 +53,7 @@ button{border:0;border-radius:10px;padding:12px 14px;font-weight:650;font-size:1
 <p class="section-note">使用免费接口：市场总览、当期涨跌分布、热门板块。点击后才请求，避免不必要地消耗接口额度。</p>
 <p id="marketStatus" class="status">尚未扫描。扫描结果会标注接口返回的数据，不把热门度当作板块强度。</p>
 <div id="marketMetrics" class="metric-grid"></div>
-<div id="marketNotes" class="bullet"></div>
+<ul id="marketNotes" class="bullet"></ul>
 <div class="panel hidden" id="marketRawPanel"><strong>接口原始摘要（核对用）</strong><pre id="marketRaw" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--muted)"></pre></div>
 </div>
 <div class="panel">
@@ -130,7 +130,7 @@ function render(data,envelope){
    metrics.append(metric("K线实体","数据不足"),metric("日内振幅","数据不足"),metric("收盘区间位置","数据不足"),metric("影线","数据不足"));
    noteArr.push("价格字段不完整或关系异常，跳过K线计算。");
  }
- noteArr.push(volume===null?"无成交量，不能判断放量/缩量。":"有成交量但缺少前一交易日同口径数据，不能判断放量或缩量。");
+ noteArr.push(volume===null?"快照没有成交量，不能分析量能。":"快照成交量单位仍需核实；历史区间均量比较请看下方历史K线模块。");
  noteArr.push("历史日线已单独获取并计算均线与区间均量；仍缺少指数、板块涨幅/成交额及涨停梯队，不能据此确认主线或买卖点。");
  notes.replaceChildren(...noteArr.map(t=>{const li=document.createElement("li");li.textContent=t;return li}));
  $("qualityPanel").classList.remove("hidden");$("structurePanel").classList.remove("hidden");

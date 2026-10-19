@@ -77,7 +77,7 @@ function draw(payload){
  $("rows").innerHTML=points.slice(-20).reverse().map(p=>'<tr><td>'+String(p.datetime||"—")+'</td><td>'+fmt(p.price)+'</td><td>'+fmt(p.avg_price)+'</td><td>'+fmt(p.volume,0)+'</td><td>'+fmt(p.amount,0)+'</td></tr>').join("");
 }
 async function query(){
- const code=$("code").value.trim();if(!/^\d{6}$/.test(code)){$("status").textContent="请输入6位股票代码。";$("status").className="status warn";return;}
+ const code=$("code").value.normalize("NFKC").replace(/\s+/g,"");$("code").value=code;if(!/^\d{6}$/.test(code)){$("status").textContent="请输入6位股票代码（仅数字，不含空格）。";$("status").className="status warn";return;}
  $("query").disabled=true;$("refresh").disabled=true;$("status").textContent="正在请求分时数据…";$("status").className="status";
  try{
   const res=await fetch(workerDefault+"/api/intraday?code="+encodeURIComponent(code),{headers:{Accept:"application/json"}});

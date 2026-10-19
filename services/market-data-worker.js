@@ -110,6 +110,94 @@ export default {
       }
     }
 
+
+    if (url.pathname === "/api/intraday") {
+      const code = (url.searchParams.get("code") || "").trim();
+      if (!/^\\d{6}$/.test(code)) {
+        return json({ error: "code must be a 6-digit A-share stock code" }, 400);
+      }
+      const market = code.startsWith("6") ? "1" : "0";
+      const secid = market + "." + code;
+      const params = new URLSearchParams({
+        secid,
+        fields1: "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13",
+        fields2: "f51,f52,f53,f54,f55,f56,f57,f58",
+        ndays: "1",
+        iscr: "0",
+        ut: "7eea3edcaed734bea9cbfc24409ed989",
+      }).toString();
+      const hosts = [
+        "https://push2.eastmoney.com",
+        "https://17.push2.eastmoney.com",
+        "https://80.push2.eastmoney.com",
+        "https://push2delay.eastmoney.com",
+        "https://push2his.eastmoney.com",
+      ];
+      const attempts = [];
+      for (const host of hosts) {
+        try {
+          const response = await fetch(host + "/api/qt/stock/trends2/get?" + params, {
+            headers: {
+              "user-agent": "Mozilla/5.0 AShareLab/0.2",
+              "referer": "https://quote.eastmoney.com/",
+              "accept": "application/json, text/plain, */*",
+            },
+            signal: AbortSignal.timeout(9000),
+          });
+          if (!response.ok) {
+            attempts.push({ host, status: response.status });
+            continue;
+          }
+          const payload = await response.json();
+          if (payload?.rc !== 0 || !payload?.data) {
+            attempts.push({ host, upstreamCode: payload?.rc ?? null });
+            continue;
+          }
+          const raw = Array.isArray(payload.data.trends) ? payload.data.trends : [];
+          const points = raw.map((line) => {
+            const a = String(line).split(",");
+            const parsedPrice = Number(a[1]);
+            const avgPrice = Number(a[2]);
+            const price = Number.isFinite(parsedPrice) && parsedPrice > 0
+              ? parsedPrice
+              : (Number.isFinite(avgPrice) && avgPrice > 0 ? avgPrice : null);
+            return {
+              datetime: a[0] || null,
+              price,
+              avg_price: Number.isFinite(avgPrice) && avgPrice > 0 ? avgPrice : null,
+              high: Number.isFinite(Number(a[3])) ? Number(a[3]) : null,
+              low: Number.isFinite(Number(a[4])) ? Number(a[4]) : null,
+              volume: Number.isFinite(Number(a[5])) ? Number(a[5]) : null,
+              amount: Number.isFinite(Number(a[6])) ? Number(a[6]) : null,
+              raw_price: Number.isFinite(parsedPrice) ? parsedPrice : null,
+            };
+          }).filter((x) => x.datetime && (x.price !== null || x.avg_price !== null));
+          if (!points.length) {
+            attempts.push({ host, error: "No usable trend points" });
+            continue;
+          }
+          const dates = points.map((x) => String(x.datetime).slice(0, 10)).filter(Boolean);
+          const uniqueDates = [...new Set(dates)];
+          return json({
+            ok: true,
+            source: "Eastmoney public intraday trend endpoint",
+            code,
+            name: payload.data.name ?? null,
+            secid,
+            requested_days: 1,
+            trade_date: uniqueDates.length ? uniqueDates[uniqueDates.length - 1] : null,
+            fetched_at: new Date().toISOString(),
+            count: points.length,
+            points,
+            note: "公开行情接口可能延迟或限流。收盘后返回的分时数据可能属于最近交易日；历史数据中的原始价格可能为0，遇到这种情况 price 使用 avg_price 作为绘图回退值，须核对 raw_price。volume 的上游单位尚未独立确认。",
+          });
+        } catch (error) {
+          attempts.push({ host, error: String(error?.message || error) });
+        }
+      }
+      return json({ error: "Intraday data unavailable", code, attempts }, 502);
+    }
+
     if (url.pathname !== "/api/sectors") {
       return json({ error: "Not found", routes: ["/health", "/api/sectors?type=concept|industry", "/api/limit-ups?type=zt|broken|dt&date=YYYYMMDD"] }, 404);
     }

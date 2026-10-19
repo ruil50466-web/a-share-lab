@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101827">
+<title>A股收盘复盘 · A-Share Lab</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121d2e;--line:#26354a;--muted:#9aabc2;--text:#eef4ff;--accent:#73b7ff;--warn:#ffcc80;--good:#77ddb4;--bad:#ff8089}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Noto Sans SC",sans-serif}main{max-width:1000px;margin:auto;padding:18px 14px 40px}h1{font-size:24px;margin:0}h2{font-size:18px;margin:0 0 10px}h3{font-size:14px;margin:15px 0 6px}p{color:var(--muted);margin:5px 0}.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric{background:#0b1422;border:1px solid var(--line);border-radius:10px;padding:10px}.k{font-size:12px;color:var(--muted)}.v{font-size:20px;font-weight:750;overflow-wrap:anywhere}.small{font-size:12px}.muted{color:var(--muted)}.warning{color:var(--warn)}.good{color:var(--good)}.bad{color:var(--bad)}label{display:block;color:var(--muted);font-size:13px;margin:7px 0 4px}input{width:100%;padding:11px;border:1px solid var(--line);border-radius:9px;background:#0b1422;color:var(--text);font-size:15px}button{border:0;border-radius:9px;padding:11px 13px;font-size:14px;font-weight:700;background:var(--accent);color:#07111f;cursor:pointer}.secondary{background:#24354b;color:var(--text)}button:disabled{opacity:.5}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.actions button{flex:1}.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}th,td{text-align:right;padding:8px 7px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600}td:first-child,th:first-child{text-align:left}.tag{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:2px 8px;font-size:12px;margin:2px}.note{font-size:13px}.status{overflow-wrap:anywhere}.hidden{display:none}.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.two{grid-template-columns:1fr}.v{font-size:18px}}
+</style>
+</head>
+<body><main>
+<h1>📊 A股收盘复盘</h1>
+<p>市场环境 · 板块强度 · 涨停梯队 · 炸板/跌停反馈</p>
+<div class="panel">
+<h2>数据源设置</h2>
+<p>这里需要填写已部署的 A-Share Lab Cloudflare Worker 地址。只填写 Worker 根地址，不要加接口路径。地址保存在本浏览器，不包含账户密码。</p>
+<label for="workerUrl">Worker HTTPS 地址</label><input id="workerUrl" placeholder="https://你的worker名.你的子域.workers.dev" inputmode="url">
+<div class="grid">
+<div><label for="tradeDate">复盘交易日</label><input id="tradeDate" placeholder="YYYYMMDD" maxlength="8" inputmode="numeric"></div>
+<div><label for="sectorLimit">每类板块展示数量</label><input id="sectorLimit" type="number" min="5" max="50" value="20"></div>
+</div>
+<div class="actions"><button id="save">保存并检查连接</button><button id="scan">扫描复盘数据</button><button id="copy" class="secondary" disabled>复制复盘材料</button></div>
+<p id="status" class="status note">尚未连接。未配置 Worker 时不会显示模拟行情。</p>
+</div>
+<div class="panel"><h2>① 市场环境证据</h2><div class="grid" id="overview">
+<div class="metric"><div class="k">涨停家数</div><div class="v">—</div></div><div class="metric"><div class="k">炸板家数</div><div class="v">—</div></div><div class="metric"><div class="k">跌停家数</div><div class="v">—</div></div><div class="metric"><div class="k">扫描日期</div><div class="v">—</div></div></div><p class="note muted">涨停池、炸板池、跌停池来自公开行情接口。非交易日空列表不能直接解释为零涨停；先核对交易日期和返回状态。</p></div>
+<div class="panel"><h2>② 板块强度排行</h2><p class="note">行业和概念分开看。涨幅榜只反映当前截面的强弱；板块涨幅高不自动等于主线，仍要检查持续性、板块内涨停梯队及次日反馈。</p><div class="two"><div><h3>概念板块</h3><div class="tablewrap"><table><thead><tr><th>板块</th><th>涨幅%</th><th>涨/跌家数</th><th>领涨股</th></tr></thead><tbody id="conceptRows"><tr><td colspan="4">尚未扫描</td></tr></tbody></table></div></div><div><h3>行业板块</h3><div class="tablewrap"><table><thead><tr><th>板块</th><th>涨幅%</th><th>涨/跌家数</th><th>领涨股</th></tr></thead><tbody id="industryRows"><tr><td colspan="4">尚未扫描</td></tr></tbody></table></div></div></div></div>
+<div class="panel"><h2>③ 涨停梯队</h2><div id="ladderSummary" class="grid"><div class="metric"><div class="k">最高连板</div><div class="v">—</div></div><div class="metric"><div class="k">涨停池返回数</div><div class="v">—</div></div></div><div class="tablewrap"><table><thead><tr><th>代码</th><th>名称</th><th>连板</th><th>涨幅%</th><th>首封</th><th>末封</th><th>炸板次数</th><th>所属行业</th></tr></thead><tbody id="limitRows"><tr><td colspan="8">尚未扫描</td></tr></tbody></table></div></div>
+<div class="panel"><h2>④ 炸板与跌停反馈</h2><div class="two"><div><h3>炸板池</h3><div class="tablewrap"><table><thead><tr><th>代码</th><th>名称</th><th>涨幅%</th><th>炸板次数</th><th>行业</th></tr></thead><tbody id="brokenRows"><tr><td colspan="5">尚未扫描</td></tr></tbody></table></div></div><div><h3>跌停池</h3><div class="tablewrap"><table><thead><tr><th>代码</th><th>名称</th><th>涨幅%</th><th>连板/状态</th><th>行业</th></tr></thead><tbody id="downRows"><tr><td colspan="5">尚未扫描</td></tr></tbody></table></div></div></div></div>
+<div class="panel"><h2>⑤ 复盘结论：证据和未知项分开</h2><div id="conclusions"><p>扫描后生成基于接口返回的观察提示。系统不会仅凭一天的涨幅榜自动认定主线。</p></div><h3>下一交易日需要验证</h3><ul id="checks"><li>板块强度能否延续，还是仅一天脉冲。</li><li>高位核心是否有正反馈，连板梯队是否向上晋级。</li><li>炸板和跌停是否扩散，昨日强势股是否出现负反馈。</li><li>事件催化能否在板块涨幅、成交额和个股梯队中得到盘面验证。</li></ul></div>
+<p class="small muted" style="margin-top:14px">只读研究工具。公开行情接口可能延迟、限流或变更；查询时间不等于行情时间。缺失数据不会用模拟值补齐。本页不提供自动下单。</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);let lastReport=null;
+function shanghaiDate(){const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const o={};for(const x of p)o[x.type]=x.value;return o.year+o.month+o.day}
+$('tradeDate').value=shanghaiDate();$('workerUrl').value=localStorage.getItem('ashare_worker_url')||'';
+function esc(s){return String(s??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function pct(v){if(v===null||v===undefined||v==='')return '—';const n=Number(v);return Number.isFinite(n)?(n>0?'+':'')+n.toFixed(2)+'%':String(v)}
+function boardNum(v){if(v===null||v===undefined||v==='')return 0;const m=String(v).match(/\d+/);return m?Number(m[0]):0}
+function root(){let s=$('workerUrl').value.trim().replace(/\/+$/,'');if(!s)throw Error('请先填写 Worker 地址');if(!/^https:\/\//i.test(s))throw Error('Worker 地址必须以 https:// 开头');return s}
+async function get(path){const r=await fetch(root()+path,{headers:{Accept:'application/json'}});const j=await r.json();if(!r.ok||j.error||j.ok===false)throw Error(path+'：'+(j.error||('HTTP '+r.status)));return j}
+function rows(id,data,kind){const el=$(id);if(!Array.isArray(data)||!data.length){el.innerHTML='<tr><td colspan="'+(kind==='sector'?4:kind==='limit'?8:5)+'">接口未返回数据；请核对交易日、上游状态及 Worker 部署情况。</td></tr>';return}
+if(kind==='sector')el.innerHTML=data.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+pct(x.change_pct)+'</td><td>'+esc(x.up_count)+' / '+esc(x.down_count)+'</td><td>'+esc(x.leading_stock)+' ('+pct(x.leading_stock_change_pct)+')</td></tr>').join('');
+if(kind==='limit')el.innerHTML=data.map(x=>'<tr><td>'+esc(x.code)+'</td><td>'+esc(x.name)+'</td><td>'+esc(x.limit_days)+'</td><td>'+pct(x.change_pct)+'</td><td>'+esc(x.first_seal)+'</td><td>'+esc(x.last_seal)+'</td><td>'+esc(x.break_times)+'</td><td>'+esc(x.industry)+'</td></tr>').join('');
+if(kind==='pool')el.innerHTML=data.map(x=>'<tr><td>'+esc(x.code)+'</td><td>'+esc(x.name)+'</td><td>'+pct(x.change_pct)+'</td><td>'+esc(kind==='pool'?x.break_times??x.limit_stat:'')+'</td><td>'+esc(x.industry)+'</td></tr>').join('');
+}
+function metric(k,v){return '<div class="metric"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'</div></div>'}
+async function check(){try{const h=await get('/health');$('status').textContent='连接成功：'+(h.service||'Worker')+'，版本 '+(h.version||'未标注')+'。';$('status').className='status note good';return true}catch(e){$('status').textContent='连接失败：'+e.message;$('status').className='status note warning';return false}}
+$('save').addEventListener('click',async()=>{try{const u=root();localStorage.setItem('ashare_worker_url',u);await check()}catch(e){$('status').textContent=e.message;$('status').className='status note warning'}});
+$('scan').addEventListener('click',async()=>{const b=$('scan');b.disabled=true;$('status').textContent='正在请求行业、概念及三类涨跌停池…';try{
+const date=$('tradeDate').value.trim();if(!/^\d{8}$/.test(date))throw Error('交易日必须是8位 YYYYMMDD，例如 20261019');const limit=Math.max(5,Math.min(50,Number($('sectorLimit').value)||20));localStorage.setItem('ashare_worker_url',root());
+const [concept,industry,zt,broken,dt]=await Promise.all([
+get('/api/sectors?type=concept&limit='+limit),get('/api/sectors?type=industry&limit='+limit),
+get('/api/limit-ups?type=zt&date='+date),get('/api/limit-ups?type=broken&date='+date),get('/api/limit-ups?type=dt&date='+date)]);
+rows('conceptRows',concept.rows,'sector');rows('industryRows',industry.rows,'sector');rows('limitRows',zt.rows,'limit');rows('brokenRows',broken.rows,'pool');rows('downRows',dt.rows,'pool');
+const z=zt.rows||[],br=broken.rows||[],dn=dt.rows||[];const top=z.reduce((m,x)=>Math.max(m,boardNum(x.limit_days)),0);
+$('overview').innerHTML=metric('涨停池返回数',zt.count??z.length)+metric('炸板池返回数',broken.count??br.length)+metric('跌停池返回数',dt.count??dn.length)+metric('查询交易日',date);
+$('ladderSummary').innerHTML=metric('最高连板',top?top+'板':'未识别')+metric('涨停池返回数',zt.count??z.length);
+const topConcept=(concept.rows||[]).slice(0,5),topIndustry=(industry.rows||[]).slice(0,5);
+const bullets=[];bullets.push('<p><span class="tag">接口事实</span> 板块数据查询时间：'+esc(concept.fetched_at||'未提供')+'；涨跌停池请求日期：'+esc(zt.requested_date||date)+'。查询时间不是行情时间。</p>');
+if(topConcept.length)bullets.push('<p><span class="tag">概念候选</span> 当前涨幅靠前：'+topConcept.map(x=>esc(x.name)+' '+pct(x.change_pct)+'（涨/跌 '+esc(x.up_count)+'/'+esc(x.down_count)+'）').join('；')+'。只代表本次接口排序，需核验梯队和延续性。</p>');
+if(topIndustry.length)bullets.push('<p><span class="tag">行业候选</span> 当前涨幅靠前：'+topIndustry.map(x=>esc(x.name)+' '+pct(x.change_pct)).join('；')+'。</p>');
+bullets.push('<p><span class="tag">计算结果</span> 本次涨停池 '+z.length+' 只、炸板池 '+br.length+' 只、跌停池 '+dn.length+' 只；这是接口返回计数，不自动等于完整市场真实总数。</p>');
+if(!z.length||(!br.length&&!dn.length))bullets.push('<p class="warning"><span class="tag">需核验</span> 至少一个池为空。可能是非交易日、数据源字段变化或上游无数据；不要直接判断为零涨停/零跌停。</p>');
+bullets.push('<p><span class="tag">暂不下结论</span> 单次板块排行和涨停池不能确认主线。需要结合前一交易日表现、市场广度、核心股晋级、板块持续性和消息催化验证。</p>');
+$('conclusions').innerHTML=bullets.join('');
+$('status').textContent='扫描完成。板块源时间：'+(concept.fetched_at||'未提供')+'；涨停池请求日期：'+(zt.requested_date||date)+'。请先核对日期和空列表提示。';$('status').className='status note good';
+lastReport={scan_date:new Date().toISOString(),trade_date:date,sector_source:concept.source,sector_fetched_at:concept.fetched_at,concept:concept.rows,industry:industry.rows,limit_ups:z,broken:br,limit_down:dn,notes:'板块涨幅榜不是主线确认；池子计数只代表接口返回值。'};
+$('copy').disabled=false;
+}catch(e){$('status').textContent='扫描失败：'+e.message;$('status').className='status note warning'}finally{b.disabled=false}});
+$('copy').addEventListener('click',async()=>{if(!lastReport)return;const txt='A股收盘复盘材料（接口原始数据摘要）\n'+JSON.stringify(lastReport,null,2)+'\n\n分析要求：区分接口事实、计算结果、推断和未知项；核对数据日期、来源、字段口径和覆盖情况；不能仅凭单日涨幅榜认定主线。';try{await navigator.clipboard.writeText(txt);$('status').textContent='复盘材料已复制，可以粘贴给 ChatGPT 继续分析。'}catch(e){const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();$('status').textContent='复盘材料已复制。'}});
+</script></body></html>

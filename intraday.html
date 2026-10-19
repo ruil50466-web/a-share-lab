@@ -26,6 +26,7 @@
 <p id="dataNote" class="muted small"></p>
 </div>
 <div class="panel hidden" id="tablePanel">
+<div class="actions"><button id="copyResult" class="secondary" type="button">复制查询结果</button></div><p id="copyStatus" class="muted small"></p>
 <h2>最近分钟数据（末尾20条）</h2><div class="tablewrap"><table><thead><tr><th>时间</th><th>价格</th><th>均价</th><th>成交量</th><th>成交额</th></tr></thead><tbody id="rows"></tbody></table></div>
 </div>
 <div class="panel">
@@ -86,6 +87,37 @@ async function query(){
  }catch(e){$("status").textContent="查询失败："+e.message;$("status").className="status warn";}
  finally{$("query").disabled=false;$("refresh").disabled=false;}
 }
+async function copyResult(){
+ if(!lastPayload){$("copyStatus").textContent="请先查询一只股票。";return;}
+ const points=lastPayload.points||[];
+ const valid=points.filter(p=>Number.isFinite(p.price)&&p.price>0);
+ const first=valid[0],last=valid[valid.length-1];
+ const change=first&&first.price?((last.price/first.price)-1)*100:null;
+ const lines=[
+  "A股个股分时查询结果",
+  "股票："+(lastPayload.name||"未知")+"（"+(lastPayload.code||$("code").value)+"）",
+  "行情日期："+(lastPayload.trade_date||"未提供"),
+  "最新分时价："+(last?fmt(last.price):"—"),
+  "首个返回价："+(first?fmt(first.price):"—"),
+  "相对首点变化："+(change===null?"—":(change>0?"+":"")+change.toFixed(2)+"%"),
+  "最新均价："+(last?fmt(last.avg_price):"—"),
+  "分钟点数："+points.length,
+  "数据抓取时间："+(lastPayload.fetched_at||"未提供"),
+  "备注："+(lastPayload.note||"公开行情接口可能延迟；请核对行情日期与抓取时间。"),
+  "",
+  "最近分钟数据（末尾20条，时间\t价格\t均价\t成交量\t成交额）",
+  ...points.slice(-20).reverse().map(p=>[p.datetime||"—",fmt(p.price),fmt(p.avg_price),fmt(p.volume,0),fmt(p.amount,0)].join("\\t"))
+ ].join("\\n");
+ try{
+  if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(lines);}
+  else{
+   const ta=document.createElement("textarea");ta.value=lines;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();
+   const ok=document.execCommand("copy");ta.remove();if(!ok)throw Error("浏览器未允许复制");
+  }
+  $("copyStatus").textContent="已复制行情摘要和最近20条分钟数据，可直接粘贴到聊天里。";$("copyStatus").className="muted small good";
+ }catch(e){$("copyStatus").textContent="复制失败，请检查浏览器剪贴板权限后重试。";$("copyStatus").className="muted small warn";}
+}
+$("copyResult").addEventListener("click",copyResult);
 $("query").addEventListener("click",query);$("refresh").addEventListener("click",query);$("code").addEventListener("keydown",e=>{if(e.key==="Enter")query();});
 window.addEventListener("resize",()=>{if(lastPayload){try{draw(lastPayload)}catch(e){}}});
 </script>

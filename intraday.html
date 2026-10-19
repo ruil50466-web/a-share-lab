@@ -106,8 +106,8 @@ async function copyResult(){
   "备注："+(lastPayload.note||"公开行情接口可能延迟；请核对行情日期与抓取时间。"),
   "",
   "最近分钟数据（末尾20条，时间\t价格\t均价\t成交量\t成交额）",
-  ...points.slice(-20).reverse().map(p=>[p.datetime||"—",fmt(p.price),fmt(p.avg_price),fmt(p.volume,0),fmt(p.amount,0)].join("\\t"))
- ].join("\\n");
+  ...points.slice(-20).reverse().map(p=>[p.datetime||"—",fmt(p.price),fmt(p.avg_price),fmt(p.volume,0),fmt(p.amount,0)].join("\t"))
+ ].join("\n");
  try{
   if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(lines);}
   else{

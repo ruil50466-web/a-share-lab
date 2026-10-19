@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101827">
+<title>A股分时行情 · A-Share Lab</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121d2e;--line:#26354a;--muted:#9aabc2;--text:#eef4ff;--accent:#73b7ff;--up:#ff6875;--down:#42d6a0;--avg:#f4bd59}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Noto Sans SC",sans-serif}main{max-width:900px;margin:auto;padding:16px 12px 36px}h1{font-size:23px;margin:0}h2{font-size:16px;margin:0 0 10px}.muted{color:var(--muted)}.small{font-size:12px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px;margin-top:12px}label{display:block;color:var(--muted);font-size:13px;margin:6px 0 4px}input{width:100%;padding:12px;border:1px solid var(--line);border-radius:9px;background:#0b1422;color:var(--text);font-size:16px}button{border:0;border-radius:9px;padding:11px 14px;font-weight:700;background:var(--accent);color:#07111f;cursor:pointer}.secondary{background:#24354b;color:var(--text)}button:disabled{opacity:.5}.actions{display:flex;gap:8px;margin-top:9px}.actions button{flex:1}.status{overflow-wrap:anywhere;font-size:13px}.good{color:#77ddb4}.warn{color:#ffcc80}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.metric{background:#0b1422;border:1px solid var(--line);border-radius:9px;padding:9px;min-width:0}.k{font-size:11px;color:var(--muted)}.v{font-size:17px;font-weight:750;overflow-wrap:anywhere}.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin:8px 0}.dot{display:inline-block;width:9px;height:3px;vertical-align:middle;margin-right:5px}.chartwrap{width:100%;overflow:hidden}canvas{display:block;width:100%;height:340px;background:#0b1422;border-radius:9px}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}td,th{text-align:right;padding:7px;border-bottom:1px solid var(--line)}td:first-child,th:first-child{text-align:left}.hidden{display:none}@media(max-width:480px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}canvas{height:310px}.v{font-size:16px}}
+</style>
+</head>
+<body><main>
+<h1>📈 A股个股分时</h1>
+<p class="muted small">分时价格 · 分时均价 · 成交量。公开行情接口可能延迟；请核对行情日期后再做判断。</p>
+<div class="panel">
+<label for="code">股票代码（6位）</label><input id="code" inputmode="numeric" maxlength="6" value="600519" placeholder="例如 600519">
+<div class="actions"><button id="query">查询分时</button><button id="refresh" class="secondary">刷新</button></div>
+<p id="status" class="status">尚未查询。</p>
+</div>
+<div class="panel hidden" id="chartPanel">
+<div id="stockName" class="muted small"></div>
+<div class="metrics" id="metrics"></div>
+<div class="legend"><span><i class="dot" style="background:#73b7ff"></i>分时价格</span><span><i class="dot" style="background:#f4bd59"></i>分时均价</span><span><i class="dot" style="background:#6c8bb3"></i>成交量</span></div>
+<div class="chartwrap"><canvas id="chart" aria-label="个股分时价格、均价与成交量图"></canvas></div>
+<p id="dataNote" class="muted small"></p>
+</div>
+<div class="panel hidden" id="tablePanel">
+<h2>最近分钟数据（末尾20条）</h2><div class="tablewrap"><table><thead><tr><th>时间</th><th>价格</th><th>均价</th><th>成交量</th><th>成交额</th></tr></thead><tbody id="rows"></tbody></table></div>
+</div>
+<div class="panel">
+<h2>怎么用</h2>
+<p class="muted small">价格线与均价线同向且价格持续在均价线上方，表示当时买方更主动的可能性增加；但必须结合板块强度、成交量、关键价位和涨停梯队，不能单独作为买入信号。</p>
+<p class="muted small">分时数据的历史回退字段可能不等于真实逐笔成交价；成交量单位需以源接口定义为准。本页不自动下单，也不会自动持续盯盘。</p>
+<p><a href="index.html" style="color:#73b7ff">返回个股行情主页</a>　·　<a href="market.html" style="color:#73b7ff">打开收盘复盘</a></p>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let lastPayload=null;
+const workerDefault="https://a-share-lab-market-data.ruil50466.workers.dev";
+function fmt(v,d=2){if(v===null||v===undefined||!Number.isFinite(Number(v)))return "—";return Number(v).toLocaleString("zh-CN",{maximumFractionDigits:d});}
+function timeOf(s){const m=String(s||"").match(/(\d{2}:\d{2})/);return m?m[1]:String(s||"");}
+function draw(payload){
+ const points=payload.points||[];if(!points.length)throw Error("接口没有可绘制的分钟数据");
+ $("chartPanel").classList.remove("hidden");$("tablePanel").classList.remove("hidden");
+ const valid=points.filter(p=>Number.isFinite(p.price)&&p.price>0);
+ if(!valid.length)throw Error("接口没有有效价格字段");
+ const first=valid[0],last=valid[valid.length-1],prev=valid[0].price;
+ const change=prev?((last.price/prev.price)-1)*100:null;
+ $("stockName").textContent=(payload.name||"股票")+" · "+payload.code+" · 行情日期："+(payload.trade_date||"接口未提供");
+ $("metrics").innerHTML=[
+  ["最新分时价",fmt(last.price)],["首个返回价",fmt(first.price)],["相对首点变化",change===null?"—":(change>0?"+":"")+change.toFixed(2)+"%"],
+  ["最新均价",fmt(last.avg_price)],["分钟点数",String(points.length)],["数据抓取时间",String(payload.fetched_at||"未提供").replace("T"," ").replace("Z"," UTC")]
+ ].map(([k,v])=>'<div class="metric"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>').join("");
+ $("dataNote").textContent=payload.note||"数据来源：东方财富公开分时接口。";
+ const canvas=$("chart"),rect=canvas.getBoundingClientRect(),dpr=Math.max(1,window.devicePixelRatio||1);
+ canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);
+ const ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);
+ const W=rect.width,H=rect.height,L=48,R=10,T=16,B=24,volH=Math.max(58,H*.23),gap=16,plotBottom=H-B-volH-gap,plotTop=T,plotH=plotBottom-plotTop,volTop=plotBottom+gap,volBottom=H-B;
+ ctx.clearRect(0,0,W,H);
+ const times=points.map(p=>timeOf(p.datetime));
+ const minute=s=>{const m=String(s).match(/(\d{2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):570;};
+ const xs=points.map(p=>{const t=minute(p.datetime);return L+(Math.max(0,Math.min(330,t-570))/330)*(W-L-R);});
+ const prices=points.flatMap(p=>[p.price,p.avg_price]).filter(v=>Number.isFinite(v)&&v>0);
+ let min=Math.min(...prices),max=Math.max(...prices);if(min===max){min*=.999;max*=1.001;}const pad=(max-min)*.08;min-=pad;max+=pad;
+ const y=v=>plotBottom-(v-min)/(max-min)*plotH;
+ ctx.font="10px system-ui";ctx.fillStyle="#9aabc2";ctx.strokeStyle="#26354a";ctx.lineWidth=1;
+ for(let i=0;i<5;i++){const yy=plotTop+i*plotH/4;ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(W-R,yy);ctx.stroke();ctx.fillText((max-(max-min)*i/4).toFixed(2),3,yy+3);}
+ const vol=points.map(p=>Number(p.volume)||0),vmax=Math.max(1,...vol);
+ points.forEach((p,i)=>{const bw=Math.max(1,Math.min(4,(W-L-R)/Math.max(points.length,1)*.7));const hh=(vol[i]/vmax)*(volBottom-volTop);ctx.fillStyle="#476486";ctx.fillRect(xs[i]-bw/2,volBottom-hh,bw,hh);});
+ function line(key,color,width){ctx.beginPath();let started=false;points.forEach((p,i)=>{const v=p[key];if(!Number.isFinite(v)||v<=0){started=false;return;}const xx=xs[i],yy=y(v);if(!started){ctx.moveTo(xx,yy);started=true;}else ctx.lineTo(xx,yy);});ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();}
+ line("avg_price","#f4bd59",1.6);line("price","#73b7ff",1.8);
+ const labels=[["09:30",0],["10:30",60],["11:30",120],["13:00",210],["14:00",270],["15:00",330]];
+ labels.forEach(([lab,offset])=>{const xx=L+offset/330*(W-L-R);ctx.fillStyle="#9aabc2";ctx.fillText(lab,Math.min(W-R-30,Math.max(L,xx-14)),H-7);});
+ ctx.fillStyle="#9aabc2";ctx.fillText("量",3,volTop+10);
+ $("rows").innerHTML=points.slice(-20).reverse().map(p=>'<tr><td>'+String(p.datetime||"—")+'</td><td>'+fmt(p.price)+'</td><td>'+fmt(p.avg_price)+'</td><td>'+fmt(p.volume,0)+'</td><td>'+fmt(p.amount,0)+'</td></tr>').join("");
+}
+async function query(){
+ const code=$("code").value.trim();if(!/^\d{6}$/.test(code)){$("status").textContent="请输入6位股票代码。";$("status").className="status warn";return;}
+ $("query").disabled=true;$("refresh").disabled=true;$("status").textContent="正在请求分时数据…";$("status").className="status";
+ try{
+  const res=await fetch(workerDefault+"/api/intraday?code="+encodeURIComponent(code),{headers:{Accept:"application/json"}});
+  const data=await res.json();if(!res.ok||data.ok===false)throw Error(data.error||("HTTP "+res.status)+(data.attempts?"；上游接口暂不可用":""));
+  lastPayload=data;draw(data);$("status").textContent="查询成功。请核对行情日期与抓取时间；收盘后数据可能是最近一个交易日。";$("status").className="status good";
+ }catch(e){$("status").textContent="查询失败："+e.message;$("status").className="status warn";}
+ finally{$("query").disabled=false;$("refresh").disabled=false;}
+}
+$("query").addEventListener("click",query);$("refresh").addEventListener("click",query);$("code").addEventListener("keydown",e=>{if(e.key==="Enter")query();});
+window.addEventListener("resize",()=>{if(lastPayload){try{draw(lastPayload)}catch(e){}}});
+</script>
+</body></html>

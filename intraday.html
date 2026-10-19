@@ -62,7 +62,9 @@ function draw(payload){
  ctx.clearRect(0,0,W,H);
  const times=points.map(p=>timeOf(p.datetime));
  const minute=s=>{const m=String(s).match(/(\d{2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):570;};
- const xs=points.map(p=>{const t=minute(p.datetime);return L+(Math.max(0,Math.min(330,t-570))/330)*(W-L-R);});
+ // 将午间休市压缩掉：上午09:30—11:30与下午13:00—15:00各占120个交易分钟，避免图表中午出现大空档。
+ const tradeMinute=s=>{const t=minute(s);if(t<=690)return Math.max(0,t-570);if(t>=780)return 120+Math.min(120,t-780);return 120;};
+ const xs=points.map(p=>L+(tradeMinute(p.datetime)/240)*(W-L-R));
  const prices=points.flatMap(p=>[p.price,p.avg_price]).filter(v=>Number.isFinite(v)&&v>0);
  let min=Math.min(...prices),max=Math.max(...prices);if(min===max){min*=.999;max*=1.001;}const pad=(max-min)*.08;min-=pad;max+=pad;
  const y=v=>plotBottom-(v-min)/(max-min)*plotH;
@@ -72,8 +74,8 @@ function draw(payload){
  points.forEach((p,i)=>{const bw=Math.max(1,Math.min(4,(W-L-R)/Math.max(points.length,1)*.7));const hh=(vol[i]/vmax)*(volBottom-volTop);ctx.fillStyle="#476486";ctx.fillRect(xs[i]-bw/2,volBottom-hh,bw,hh);});
  function line(key,color,width){ctx.beginPath();let started=false;points.forEach((p,i)=>{const v=p[key];if(!Number.isFinite(v)||v<=0){started=false;return;}const xx=xs[i],yy=y(v);if(!started){ctx.moveTo(xx,yy);started=true;}else ctx.lineTo(xx,yy);});ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();}
  line("avg_price","#f4bd59",1.6);line("price","#73b7ff",1.8);
- const labels=[["09:30",0],["10:30",60],["11:30",120],["13:00",210],["14:00",270],["15:00",330]];
- labels.forEach(([lab,offset])=>{const xx=L+offset/330*(W-L-R);ctx.fillStyle="#9aabc2";ctx.fillText(lab,Math.min(W-R-30,Math.max(L,xx-14)),H-7);});
+ const labels=[["09:30",0],["10:30",60],["11:30",120],["13:00",120],["14:00",180],["15:00",240]];
+ labels.forEach(([lab,offset],i)=>{const xx=L+offset/240*(W-L-R);ctx.fillStyle="#9aabc2";if(i===2){ctx.fillText(lab,Math.max(L,xx-28),H-7);}else if(i===3){ctx.fillText(lab,Math.min(W-R-30,xx+3),H-7);}else{ctx.fillText(lab,Math.min(W-R-30,Math.max(L,xx-14)),H-7);}});
  ctx.fillStyle="#9aabc2";ctx.fillText("量",3,volTop+10);
  $("rows").innerHTML=points.slice(-20).reverse().map(p=>'<tr><td>'+String(p.datetime||"—")+'</td><td>'+fmt(p.price)+'</td><td>'+fmt(p.avg_price)+'</td><td>'+fmt(p.volume,0)+'</td><td>'+fmt(p.amount,0)+'</td></tr>').join("");
 }

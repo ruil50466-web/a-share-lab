@@ -6,6 +6,7 @@
  * Routes:
  *   GET /health
  *   GET /api/sectors?type=concept|industry&limit=20
+ *   GET /api/intraday?code=600519
  *
  * This is a research prototype, not an execution/trading system.
  */
@@ -40,7 +41,7 @@ export default {
     const url = new URL(request.url);
     if (request.method !== "GET") return json({ error: "GET only" }, 405);
     if (url.pathname === "/health") {
-      return json({ ok: true, service: "a-share-lab", version: "0.1.0" });
+      return json({ ok: true, service: "a-share-lab", version: "0.2.0" });
     }
     if (url.pathname === "/api/limit-ups") {
       const type = url.searchParams.get("type") || "zt";

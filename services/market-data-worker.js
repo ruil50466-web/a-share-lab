@@ -10,10 +10,13 @@
  * This is a research prototype, not an execution/trading system.
  */
 const UPSTREAM_HOSTS = [
-  "https://push2ex.eastmoney.com",
+  "https://80.push2.eastmoney.com",
+  "https://17.push2.eastmoney.com",
+  "https://79.push2.eastmoney.com",
+  "https://push2.eastmoney.com",
   "https://push2delay.eastmoney.com",
   "https://82.push2.eastmoney.com",
-  "https://push2.eastmoney.com",
+  "https://push2ex.eastmoney.com",
 ];
 const FILTERS = {
   concept: "m:90+t:3+f:!50",
@@ -65,14 +68,14 @@ export default {
           signal: AbortSignal.timeout(10000),
         });
         if (!response.ok) {
-        const upstreamBody = await response.text().catch(() => "");
-        return json({
-          error: "Upstream HTTP error",
-          status: response.status,
-          statusText: response.statusText,
-          upstreamBody: upstreamBody.slice(0, 500),
-        }, 502);
-      }
+          const upstreamBody = await response.text().catch(() => "");
+          return json({
+            error: "Upstream HTTP error",
+            status: response.status,
+            statusText: response.statusText,
+            upstreamBody: upstreamBody.slice(0, 500),
+          }, 502);
+        }
         const payload = await response.json();
         if (payload?.rc !== 0) {
           return json({ error: "Unexpected upstream response", upstreamCode: payload?.rc ?? null }, 502);

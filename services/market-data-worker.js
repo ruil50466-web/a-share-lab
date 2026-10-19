@@ -113,7 +113,7 @@ export default {
 
     if (url.pathname === "/api/intraday") {
       const code = (url.searchParams.get("code") || "").trim();
-      if (!/^\\d{6}$/.test(code)) {
+      if (!/^\d{6}$/.test(code)) {
         return json({ error: "code must be a 6-digit A-share stock code" }, 400);
       }
       const market = code.startsWith("6") ? "1" : "0";
@@ -199,7 +199,7 @@ export default {
     }
 
     if (url.pathname !== "/api/sectors") {
-      return json({ error: "Not found", routes: ["/health", "/api/sectors?type=concept|industry", "/api/limit-ups?type=zt|broken|dt&date=YYYYMMDD"] }, 404);
+      return json({ error: "Not found", routes: ["/health", "/api/sectors?type=concept|industry", "/api/limit-ups?type=zt|broken|dt&date=YYYYMMDD", "/api/intraday?code=600519"] }, 404);
     }
 
     const type = url.searchParams.get("type") || "concept";

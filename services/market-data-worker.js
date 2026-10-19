@@ -113,9 +113,11 @@ export default {
 
 
     if (url.pathname === "/api/intraday") {
-      const code = (url.searchParams.get("code") || "").trim();
+      const rawCode = url.searchParams.get("code") || "";
+      // Normalize full-width digits and remove whitespace from mobile keyboards.
+      const code = rawCode.normalize("NFKC").replace(/\s+/g, "");
       if (!/^\d{6}$/.test(code)) {
-        return json({ error: "code must be a 6-digit A-share stock code" }, 400);
+        return json({ error: "code must be a 6-digit A-share stock code", received: rawCode, normalized: code }, 400);
       }
       const market = code.startsWith("6") ? "1" : "0";
       const secid = market + "." + code;

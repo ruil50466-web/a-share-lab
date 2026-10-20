@@ -30,7 +30,7 @@ $('date').value=shDate();
 function esc(s){return String(s??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function pct(v){if(v===null||v===undefined||v==='')return '—';const n=Number(v);return Number.isFinite(n)?(n>0?'+':'')+n.toFixed(2)+'%':esc(v)}
 function n(v){if(v===null||v===undefined||v==='')return null;const z=Number(v);return Number.isFinite(z)?z:null}
-function amount(v){const z=n(v);if(z===null)return '—';if(Math.abs(z)>=1e8)return (z/1e8).toFixed(2)+'亿';if(Math.abs(z)>=1e4)return (z/1e4).toFixed(2)+'万';return z.toLocaleString('zh-CN')}
+function amount(v){const z=n(v);if(z===null)return '—';return z.toLocaleString('zh-CN',{maximumFractionDigits:0})+'（源字段值）'}
 function root(){const s=$('worker').value.trim().replace(/\/+$/,'');if(!/^https:\/\//i.test(s))throw Error('请输入以 https:// 开头的 Worker 地址');return s}
 async function get(path){const r=await fetch(root()+path,{headers:{Accept:'application/json'}});let j;try{j=await r.json()}catch{throw Error(path+'：响应不是有效 JSON（HTTP '+r.status+'）')}if(!r.ok||j.ok===false||j.error)throw Error(path+'：'+(j.error||('HTTP '+r.status)));return j}
 function breadth(x){const up=n(x.up_count),down=n(x.down_count);if(up===null||down===null||up+down<=0)return null;return up/(up+down)*100}

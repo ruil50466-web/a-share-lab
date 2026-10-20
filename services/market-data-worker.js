@@ -326,7 +326,7 @@ export default {
     }
     const params = new URLSearchParams({
       pn: "1",
-      pz: String(limit),
+      pz: String(Math.min(limit, 100)),
       po: "1",
       np: "1",
       fltt: "2",
@@ -407,7 +407,45 @@ export default {
     }
 
     const payload = usable.payload;
-    const diff = Array.isArray(payload.data.diff) ? payload.data.diff : Object.values(payload.data.diff || {});
+    const pageSize = Math.min(limit, 100);
+    const total = Number(payload.data.total) || null;
+    const firstDiff = Array.isArray(payload.data.diff) ? payload.data.diff : Object.values(payload.data.diff || {});
+    let allDiff = [...firstDiff];
+    const pageCount = Math.min(Math.ceil(limit / pageSize), total ? Math.ceil(total / pageSize) : 1);
+    const pageErrors = [];
+    // Eastmoney often caps a single page at 100; aggregate subsequent pages so
+    // client-side amount/breadth ranks are not restricted to the first gainers page.
+    if (pageCount > 1) {
+      for (let pn = 2; pn <= pageCount; pn++) {
+        const pageParams = new URLSearchParams({
+          pn: String(pn), pz: String(pageSize), po: "1", np: "1",
+          fltt: "2", invt: "2", fid: "f3", fs: FILTERS[type],
+          fields: "f2,f3,f4,f5,f6,f12,f14,f104,f105,f128,f136",
+        });
+        try {
+          const target = new URL(usable.host + usable.path);
+          target.search = pageParams.toString() + "&_=" + Date.now();
+          const response = await fetch(target.toString(), {
+            headers: {
+              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+              "referer": "https://quote.eastmoney.com/center/",
+              "accept": "application/json, text/plain, */*",
+              "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
+            },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          const pagePayload = await response.json();
+          if (pagePayload?.rc !== 0 || !pagePayload?.data || pagePayload?.data?.diff == null) throw new Error("Unexpected payload shape");
+          const pageDiff = Array.isArray(pagePayload.data.diff) ? pagePayload.data.diff : Object.values(pagePayload.data.diff || {});
+          allDiff.push(...pageDiff);
+        } catch (error) {
+          pageErrors.push({ page: pn, error: String(error?.message || error) });
+          break;
+        }
+      }
+    }
+    const diff = allDiff.slice(0, limit);
     const rows = diff.map((x) => ({
       code: x.f12 ?? null,
       name: x.f14 ?? null,
@@ -425,14 +463,16 @@ export default {
       source_host: usable.host,
       source_path: usable.path,
       type,
-      sort,
-      sort_field: sortFields[sort],
       requested_date: null,
       fetched_at: new Date().toISOString(),
       quote_timestamp: null,
       count: rows.length,
+      upstream_total: total,
+      requested_limit: limit,
+      coverage_complete: !pageErrors.length && (total === null || rows.length >= Math.min(total, limit)),
+      page_errors: pageErrors,
       empty_reason: rows.length === 0 ? "上游请求成功但返回空列表；行情日期/筛选口径仍需核实，不能直接视为没有强势板块。" : null,
-      note: "fetched_at 是请求成功时间，不等于行情归属日期；本接口未提供可核验的行情时间戳。空列表与请求失败分开处理。",
+      note: "fetched_at 是请求成功时间，不等于行情归属日期；排序基于已返回板块集合；coverage_complete=false 时为部分覆盖，不得称为全量排名。",
       rows,
     });
   },

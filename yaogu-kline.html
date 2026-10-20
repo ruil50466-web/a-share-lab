@@ -48,7 +48,7 @@ const STORE="asharelab_yaogu_kline_watchlist_v1";
 function num(v){if(v===null||v===undefined||v==="")return null;const n=Number(v);return Number.isFinite(n)?n:null}
 function first(o,keys){for(const k of keys)if(o&&o[k]!==undefined&&o[k]!==null&&o[k]!=="")return o[k];return null}
 function fmt(v,d=2){return v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString("zh-CN",{maximumFractionDigits:d})}
-function normCode(v){let s=String(v||"").trim();if(/^(sh|sz)\d{6}$/i.test(s))return s.toLowerCase();if(/^\d{6}$/.test(s))return (/^[569]/.test(s)?"sh":"sz")+s;return ""}
+function normCode(v){let s=String(v||"").trim();if(/^(sh|sz|bj)\d{6}$/i.test(s))return s.toLowerCase();if(/^\d{6}$/.test(s))return (/^[48]/.test(s)?"bj":(/^[569]/.test(s)?"sh":"sz"))+s;return ""}
 function loadList(){try{const x=JSON.parse(localStorage.getItem(STORE)||"[]");return Array.isArray(x)?x:[]}catch(e){return []}}
 function saveList(list){localStorage.setItem(STORE,JSON.stringify(list));renderList()}
 function keyOf(x){return x.code+"|"+(x.signalDate||"")}

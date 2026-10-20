@@ -30,7 +30,7 @@ function json(data, status = 200) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": "*",
-      "cache-control": "public, max-age=30",
+      "cache-control": status >= 400 ? "no-store" : "public, max-age=10",
     },
   });
 }

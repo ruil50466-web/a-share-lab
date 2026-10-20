@@ -75,3 +75,19 @@ python scripts/analyze_signals.py
 - 原有 [妖信号与龙头识别策略](strategies/妖信号与龙头识别策略.md) 继续保留龙头相对强弱、量价效率与研究流程。
 
 注意：原始名单不等于完整回测数据。未知字段留空；在补齐历史行情和失败样本前，不报告策略胜率或宣称假设成立。
+
+## 妖信号历史K线验证（第一阶段）
+
+- `scripts/fetch_yaogu_history.py`：读取 2026-08-20 至 2026-10-20 的正式妖信号名单，匹配股票代码并抓取历史日K，输出事件收益表。
+- `scripts/analyze_yaogu_history.py`：汇总次日收盘、3/5/10日盘中高点、最大回撤及不同阈值触及率。
+- `docs/yaogu_history_backtest.md`：运行方法、输出文件和统计口径。
+
+运行方式：
+
+```bash
+python scripts/fetch_yaogu_history.py
+python scripts/analyze_yaogu_history.py
+```
+
+本阶段是历史事件研究，不是成交级回测。六月旧样本明确排除；代码匹配不确定、行情接口失败、K线覆盖不足的记录必须单独核对。盘中最高价触及率不能称为真实可成交胜率。
+

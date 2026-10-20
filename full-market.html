@@ -12,7 +12,7 @@
 <h1>A股全市场扫描</h1>
 <p>先看市场广度，再看行业扩散和个股强度。这里是快照筛查，不是自动买入信号。</p>
 <div class="panel">
-<div class="actions"><button id="scan" class="btn">扫描全市场</button><button id="refresh" class="btn secondary">重新扫描</button></div>
+<div class="actions"><button id="scan" class="btn">扫描全市场</button><button id="refresh" class="btn secondary">重新扫描</button><button id="copyResults" class="btn secondary" disabled>复制结果</button></div>
 <div id="status" class="status">等待扫描。扫描将按页读取行情，预计约 12 页；若上游限流会显示失败页，不会悄悄把部分数据当全市场。</div>
 <div id="meta" class="note"></div>
 </div>
@@ -52,6 +52,31 @@ function groupSectors(){const map=new Map();for(const s of stocks){const name=s.
 function renderSectors(){const gs=groupSectors();$("sectorTable").querySelector("tbody").innerHTML=gs.slice(0,35).map(g=>'<tr><td>'+esc(g.name)+'</td><td>'+g.a.length+'</td><td class="'+(g.breadth>=.5?"up":"")+'">'+(g.breadth*100).toFixed(1)+'%</td><td class="'+cls(g.med)+'">'+pct(g.med)+'</td><td>'+g.limit+'</td><td>'+g.strong+'</td><td>'+money(g.amt)+'</td></tr>').join("")||'<tr><td colspan="7">无行业数据</td></tr>';$("sectorFilter").innerHTML='<option value="">全部行业</option>'+gs.map(g=>'<option value="'+esc(g.name)+'">'+esc(g.name)+'</option>').join("")}
 function getVisible(){let a=stocks.filter(s=>!$("excludeST").checked||!String(s.name||"").includes("ST"));const q=$("search").value.trim().toLowerCase(),sec=$("sectorFilter").value;if(q)a=a.filter(s=>[s.code,s.name,s.industry].some(v=>String(v||"").toLowerCase().includes(q)));if(sec)a=a.filter(s=>(s.industry||"行业未知")===sec);if(currentMode==="leaders")a.sort((x,y)=>(num(y.change_pct)||-999)-(num(x.change_pct)||-999));if(currentMode==="volume")a.sort((x,y)=>((num(y.volume_ratio)||0)*(Math.max(0,num(y.change_pct)||0)+1))-((num(x.volume_ratio)||0)*(Math.max(0,num(x.change_pct)||0)+1)));if(currentMode==="amount")a.sort((x,y)=>(num(y.amount)||0)-(num(x.amount)||0));if(currentMode==="turnover")a.sort((x,y)=>(num(y.turnover_pct)||0)-(num(x.turnover_pct)||0));return a.slice(0,200)}
 function renderStocks(){const a=getVisible();$("stockTable").querySelector("tbody").innerHTML=a.map(s=>'<tr><td>'+esc(s.code)+'</td><td>'+esc(s.name)+'</td><td>'+esc(s.industry||"—")+'</td><td class="'+cls(s.change_pct)+'">'+pct(s.change_pct)+'</td><td>'+ (num(s.price)===null?"—":num(s.price).toFixed(2))+'</td><td>'+money(s.amount)+'</td><td>'+ (num(s.volume_ratio)===null?"—":num(s.volume_ratio).toFixed(2))+'</td><td>'+pct(s.turnover_pct)+'</td><td>'+pct(s.amplitude_pct)+'</td><td>'+money(s.float_market_cap)+'</td></tr>').join("")||'<tr><td colspan="10">没有符合筛选条件的结果</td></tr>';$("stockCount").textContent="当前显示 "+a.length+" 条（最多展示 200 条）；排序仅用于发现线索，不代表买点。"}
-function renderAll(){renderMetrics();renderSectors();renderStocks()}
-$("scan").addEventListener("click",scan);$("refresh").addEventListener("click",scan);$("search").addEventListener("input",renderStocks);$("sectorFilter").addEventListener("change",renderStocks);$("excludeST").addEventListener("change",renderStocks);document.querySelectorAll("#stockTabs .tab").forEach(b=>b.addEventListener("click",()=>{currentMode=b.dataset.mode;document.querySelectorAll("#stockTabs .tab").forEach(x=>x.classList.toggle("active",x===b));renderStocks()}));
+function buildCopyText(){
+ const gs=groupSectors().slice(0,20);
+ const metricLines=[
+  "去重样本："+stocks.length,
+  "上涨 / 下跌："+stocks.filter(s=>(num(s.change_pct)||0)>0).length+" / "+stocks.filter(s=>(num(s.change_pct)||0)<0).length,
+  "涨幅中位数："+pct(median(stocks.map(s=>num(s.change_pct)).filter(v=>v!==null))),
+  "涨幅≥5%："+stocks.filter(s=>(num(s.change_pct)||0)>=5).length,
+  "量比≥2："+stocks.filter(s=>(num(s.volume_ratio)||0)>=2).length,
+  "上游 total："+(totalExpected??"未知"),
+  "扫描时间："+(scanTime?new Date(scanTime).toLocaleString("zh-CN",{hour12:false}):"未知"),
+  "分页失败："+(failures.length?failures.map(x=>x.p).join(","):"无")
+ ];
+ const stockLines=getVisible().map(s=>[s.code,s.name,s.industry||"行业未知",pct(s.change_pct),num(s.price)===null?"—":num(s.price).toFixed(2),money(s.amount),num(s.volume_ratio)===null?"—":num(s.volume_ratio).toFixed(2),pct(s.turnover_pct),pct(s.amplitude_pct),money(s.float_market_cap)].join("\\t"));
+ return ["A股全市场扫描结果","数据为行情快照，排名不构成交易信号。",...metricLines,"","行业扩散排名（前20）","行业\\t样本\\t上涨比例\\t涨幅中位数\\t涨停近似数\\t强势股数\\t成交额",...gs.map(g=>[g.name,g.a.length,(g.breadth*100).toFixed(1)+"%",pct(g.med),g.limit,g.strong,money(g.amt)].join("\\t")),"","当前个股列表（最多200条，遵循页面当前筛选与排序）","代码\\t名称\\t行业\\t涨幅\\t现价\\t成交额\\t量比\\t换手\\t振幅\\t流通市值",...stockLines,"","注意：涨停数为涨幅阈值近似值；上游过滤器覆盖范围未独立审计；当前接口无历史日K。"].join("\\n");
+}
+async function copyResults(){
+ if(!stocks.length){$("status").textContent="还没有扫描结果，请先点击“扫描全市场”。";return}
+ const text=buildCopyText();const btn=$("copyResults");btn.disabled=true;
+ try{
+  if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(text)}
+  else {const area=document.createElement("textarea");area.value=text;area.style.position="fixed";area.style.opacity="0";document.body.appendChild(area);area.select();const ok=document.execCommand("copy");area.remove();if(!ok)throw new Error("浏览器未允许复制")}
+  $("status").textContent="已复制扫描摘要、前20个行业和当前筛选的个股列表。可以直接粘贴到聊天里。";
+ }catch(e){$("status").textContent="自动复制失败。浏览器可能未授予剪贴板权限："+String(e.message||e);}
+ finally{btn.disabled=false}
+}
+function renderAll(){renderMetrics();renderSectors();renderStocks();$("copyResults").disabled=!stocks.length}
+$("scan").addEventListener("click",scan);$("refresh").addEventListener("click",scan);$("copyResults").addEventListener("click",copyResults);$("search").addEventListener("input",renderStocks);$("sectorFilter").addEventListener("change",renderStocks);$("excludeST").addEventListener("change",renderStocks);document.querySelectorAll("#stockTabs .tab").forEach(b=>b.addEventListener("click",()=>{currentMode=b.dataset.mode;document.querySelectorAll("#stockTabs .tab").forEach(x=>x.classList.toggle("active",x===b));renderStocks()}));
 </script></body></html>

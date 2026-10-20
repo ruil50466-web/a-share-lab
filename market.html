@@ -52,23 +52,27 @@ async function check(){try{const h=await get('/health');$('status').textContent=
 $('save').addEventListener('click',async()=>{try{const u=root();localStorage.setItem('ashare_worker_url',u);await check()}catch(e){$('status').textContent=e.message;$('status').className='status note warning'}});
 $('scan').addEventListener('click',async()=>{const b=$('scan');b.disabled=true;$('status').textContent='正在请求行业、概念及三类涨跌停池…';try{
 const date=$('tradeDate').value.trim();if(!/^\d{8}$/.test(date))throw Error('交易日必须是8位 YYYYMMDD，例如 20261019');const limit=Math.max(5,Math.min(50,Number($('sectorLimit').value)||20));localStorage.setItem('ashare_worker_url',root());
-const [concept,industry,zt,broken,dt]=await Promise.all([
+const settled=await Promise.allSettled([
 get('/api/sectors?type=concept&limit='+limit),get('/api/sectors?type=industry&limit='+limit),
 get('/api/limit-ups?type=zt&date='+date),get('/api/limit-ups?type=broken&date='+date),get('/api/limit-ups?type=dt&date='+date)]);
+const fallback=(r,label)=>r.status==='fulfilled'?r.value:{ok:false,error:label+': '+String(r.reason?.message||r.reason||'请求失败'),rows:[],count:null,requested_date:date};
+const [concept,industry,zt,broken,dt]=settled.map((r,i)=>fallback(r,['概念板块','行业板块','涨停池','炸板池','跌停池'][i]));
 rows('conceptRows',concept.rows,'sector');rows('industryRows',industry.rows,'sector');rows('limitRows',zt.rows,'limit');rows('brokenRows',broken.rows,'pool');rows('downRows',dt.rows,'pool');
 const z=zt.rows||[],br=broken.rows||[],dn=dt.rows||[];const top=z.reduce((m,x)=>Math.max(m,boardNum(x.limit_days)),0);
 $('overview').innerHTML=metric('涨停池返回数',zt.count??z.length)+metric('炸板池返回数',broken.count??br.length)+metric('跌停池返回数',dt.count??dn.length)+metric('查询交易日',date);
 $('ladderSummary').innerHTML=metric('最高连板',top?top+'板':'未识别')+metric('涨停池返回数',zt.count??z.length);
 const topConcept=(concept.rows||[]).slice(0,5),topIndustry=(industry.rows||[]).slice(0,5);
+const failed=settled.map((r,i)=>r.status==='rejected'?['概念板块','行业板块','涨停池','炸板池','跌停池'][i]+': '+String(r.reason?.message||r.reason||'请求失败'):null).filter(Boolean);
 const bullets=[];bullets.push('<p><span class="tag">接口事实</span> 板块数据查询时间：'+esc(concept.fetched_at||'未提供')+'；涨跌停池请求日期：'+esc(zt.requested_date||date)+'。查询时间不是行情时间。</p>');
 if(topConcept.length)bullets.push('<p><span class="tag">概念候选</span> 当前涨幅靠前：'+topConcept.map(x=>esc(x.name)+' '+pct(x.change_pct)+'（涨/跌 '+esc(x.up_count)+'/'+esc(x.down_count)+'）').join('；')+'。只代表本次接口排序，需核验梯队和延续性。</p>');
 if(topIndustry.length)bullets.push('<p><span class="tag">行业候选</span> 当前涨幅靠前：'+topIndustry.map(x=>esc(x.name)+' '+pct(x.change_pct)).join('；')+'。</p>');
 bullets.push('<p><span class="tag">计算结果</span> 本次涨停池 '+z.length+' 只、炸板池 '+br.length+' 只、跌停池 '+dn.length+' 只；这是接口返回计数，不自动等于完整市场真实总数。</p>');
 if(!z.length||(!br.length&&!dn.length))bullets.push('<p class="warning"><span class="tag">需核验</span> 至少一个池为空。可能是非交易日、数据源字段变化或上游无数据；不要直接判断为零涨停/零跌停。</p>');
+if(failed.length)bullets.push('<p class="warning"><span class="tag">接口失败</span> '+failed.map(esc).join('；')+'。其他成功模块仍保留；失败项不代表真实零数据。</p>');
 bullets.push('<p><span class="tag">暂不下结论</span> 单次板块排行和涨停池不能确认主线。需要结合前一交易日表现、市场广度、核心股晋级、板块持续性和消息催化验证。</p>');
 $('conclusions').innerHTML=bullets.join('');
-$('status').textContent='扫描完成。板块源时间：'+(concept.fetched_at||'未提供')+'；涨停池请求日期：'+(zt.requested_date||date)+'。请先核对日期和空列表提示。';$('status').className='status note good';
-lastReport={scan_date:new Date().toISOString(),trade_date:date,sector_source:concept.source,sector_fetched_at:concept.fetched_at,concept:concept.rows,industry:industry.rows,limit_ups:z,broken:br,limit_down:dn,notes:'板块涨幅榜不是主线确认；池子计数只代表接口返回值。'};
+$('status').textContent=(failed.length?'扫描部分完成，失败 '+failed.length+' 项：'+failed.join('；')+'。':'扫描完成。')+'板块源时间：'+(concept.fetched_at||'未提供')+'；涨停池请求日期：'+(zt.requested_date||date)+'。请先核对日期和空列表提示。';$('status').className='status note '+(failed.length?'warning':'good');
+lastReport={scan_date:new Date().toISOString(),trade_date:date,sector_source:concept.source||null,sector_fetched_at:concept.fetched_at||null,concept,industry,limit_ups:zt,broken,limit_down:dt,failed,notes:'板块涨幅榜不是主线确认；池子计数只代表接口返回值。失败项不等于零数据。'};
 $('copy').disabled=false;
 }catch(e){$('status').textContent='扫描失败：'+e.message;$('status').className='status note warning'}finally{b.disabled=false}});
 $('copy').addEventListener('click',async()=>{if(!lastReport)return;const txt='A股收盘复盘材料（接口原始数据摘要）\n'+JSON.stringify(lastReport,null,2)+'\n\n分析要求：区分接口事实、计算结果、推断和未知项；核对数据日期、来源、字段口径和覆盖情况；不能仅凭单日涨幅榜认定主线。';try{await navigator.clipboard.writeText(txt);$('status').textContent='复盘材料已复制，可以粘贴给 ChatGPT 继续分析。'}catch(e){const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();$('status').textContent='复盘材料已复制。'}});

@@ -10,9 +10,10 @@
 
 ```bash
 python scripts/fetch_yaogu_history.py
+python scripts/analyze_yaogu_history.py
 ```
 
-可选参数：`--count 120 --sleep 0.4`。股票代码从项目现有 Worker 的 /api/stocks 读取，历史日K使用网页现有接口 https://api.ashareapi.com/v1/kline。若接口限流或变更，脚本记录失败，不会用模拟数据补齐。
+可选抓取参数：`--count 120 --sleep 0.4`。股票代码从项目现有 Worker 的 /api/stocks 读取，历史日K使用网页现有接口 https://api.ashareapi.com/v1/kline。若接口限流或变更，脚本记录失败，不会用模拟数据补齐。
 
 ## 输出
 - yaogu_daily_klines.csv：已匹配股票的历史日K。
@@ -37,5 +38,7 @@ python scripts/fetch_yaogu_history.py
 3. 先报告覆盖率、缺失率、各窗口收益分布和最大回撤。
 4. 再按二进三、三进四、前置涨停、同板块聚集、首次出现批次分组。
 5. 最后构造同日期、相似连板阶段的非信号对照组，检验妖信号是否提供增量信息。
+
+当前分析脚本会展示收益分布及 +5%/+10%/+20% 盘中高点触及率。这些阈值是敏感性分析，不是事先认定的成功标准，也不是可实现胜率。
 
 这属于历史事件研究，不是成交级回测；尚未处理信号可见时刻、买卖队列、涨跌停无法成交、滑点、费用、停牌与复权因子变化。

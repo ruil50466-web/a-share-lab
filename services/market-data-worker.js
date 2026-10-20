@@ -319,6 +319,11 @@ export default {
     // by change, turnover and breadth instead of re-sorting only the top 30 by change.
     const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(500, Math.floor(rawLimit))) : 500;
 
+    const sort = url.searchParams.get("sort") || "pct";
+    const sortFields = { pct: "f3", amount: "f6", up_count: "f104" };
+    if (!Object.prototype.hasOwnProperty.call(sortFields, sort)) {
+      return json({ error: "sort must be pct, amount, or up_count" }, 400);
+    }
     const params = new URLSearchParams({
       pn: "1",
       pz: String(limit),
@@ -326,7 +331,7 @@ export default {
       np: "1",
       fltt: "2",
       invt: "2",
-      fid: "f3",
+      fid: sortFields[sort],
       fs: FILTERS[type],
       fields: "f2,f3,f4,f5,f6,f12,f14,f104,f105,f128,f136",
     }).toString();
@@ -420,6 +425,8 @@ export default {
       source_host: usable.host,
       source_path: usable.path,
       type,
+      sort,
+      sort_field: sortFields[sort],
       requested_date: null,
       fetched_at: new Date().toISOString(),
       quote_timestamp: null,

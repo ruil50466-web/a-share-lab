@@ -17,7 +17,6 @@ const UPSTREAM_HOSTS = [
   "https://push2.eastmoney.com",
   "https://push2delay.eastmoney.com",
   "https://82.push2.eastmoney.com",
-  "https://push2ex.eastmoney.com",
 ];
 const FILTERS = {
   concept: "m:90+t:3+f:!50",
@@ -125,6 +124,7 @@ export default {
         fltt: "2",
         invt: "2",
         fid: "f3",
+        ut: "7eea3edcaed734bea9cbfc24409ed989",
         fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
         fields: "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21,f23,f100",
       }).toString();
@@ -140,7 +140,8 @@ export default {
             signal: AbortSignal.timeout(10000),
           });
           if (!response.ok) {
-            attempts.push({ host, status: response.status });
+            const body = await response.text().catch(() => "");
+            attempts.push({ host, status: response.status, statusText: response.statusText, body: body.slice(0, 240) });
             continue;
           }
           const payload = await response.json();

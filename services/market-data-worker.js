@@ -129,11 +129,16 @@ export default {
         fields: "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21,f23,f100",
       }).toString();
       const attempts = [];
-      // Eastmoney hosts may reject one route while another host/path still works.
-      // Try both documented frontend path variants and retain diagnostics.
+      // Keep a strict total budget: probing every mirror sequentially can
+      // outlive the browser request and make the scanner appear frozen.
       const paths = ["/webguest/api/qt/clist/get?", "/api/qt/clist/get?"];
-      for (const host of UPSTREAM_HOSTS) {
-        for (const path of paths) {
+      const candidates = [
+        [UPSTREAM_HOSTS[0], paths[0]],
+        [UPSTREAM_HOSTS[0], paths[1]],
+        [UPSTREAM_HOSTS[1], paths[0]],
+        [UPSTREAM_HOSTS[2], paths[0]],
+      ];
+      for (const [host, path] of candidates) {
           try {
             const response = await fetch(host + path + params, {
               headers: {
@@ -142,7 +147,7 @@ export default {
                 "accept": "application/json, text/plain, */*",
                 "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
               },
-              signal: AbortSignal.timeout(8000),
+              signal: AbortSignal.timeout(5000),
             });
             if (!response.ok) {
               const body = await response.text().catch(() => "");
@@ -202,7 +207,6 @@ export default {
           } catch (error) {
             attempts.push({ host, path: path.split("?")[0], error: String(error?.message || error) });
           }
-        }
       }
       return json({
         ok: false,

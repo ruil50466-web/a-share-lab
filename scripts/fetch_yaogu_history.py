@@ -98,12 +98,14 @@ def main():
         if code and date in dates:
             i=dates.index(date); close=bs[i]["close"]; fut=bs[i+1:]
             def hi(n):
+                if len(fut) < n: return ""
                 vals=[x["high"] for x in fut[:n] if x["high"] is not None]
                 return round(pct(max(vals),close),4) if vals else ""
             def lo(n):
+                if len(fut) < n: return ""
                 vals=[x["low"] for x in fut[:n] if x["low"] is not None]
                 return round(pct(min(vals),close),4) if vals else ""
-            base.update({"当日收盘":close,"次日收盘收益_pct":round(pct(fut[0]["close"],close),4) if fut else "","次日最高收益_pct":round(pct(fut[0]["high"],close),4) if fut and fut[0]["high"] is not None else "","3日最高收益_pct":hi(3),"5日最高收益_pct":hi(5),"10日最高收益_pct":hi(10),"3日最大回撤_pct":lo(3),"5日最大回撤_pct":lo(5),"有效后续K线数":len(fut),"状态":"可统计" if len(fut)>=5 else "后续K线不足"})
+            base.update({"当日收盘":close,"次日收盘收益_pct":round(pct(fut[0]["close"],close),4) if fut else "","次日最高收益_pct":round(pct(fut[0]["high"],close),4) if fut and fut[0]["high"] is not None else "","3日最高收益_pct":hi(3),"5日最高收益_pct":hi(5),"10日最高收益_pct":hi(10),"3日最大回撤_pct":lo(3),"5日最大回撤_pct":lo(5),"有效后续K线数":len(fut),"状态":"10日窗口完整" if len(fut)>=10 else "后续K线不足，窗口未完成"})
         outcomes.append(base)
     write_csv(out/"yaogu_daily_klines.csv",bars,FIELDS)
     write_csv(out/"yaogu_signal_code_match.csv",[{"股票名称":n,"股票代码":c} for n,c in sorted(name_code.items())],["股票名称","股票代码"])

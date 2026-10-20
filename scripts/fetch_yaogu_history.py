@@ -63,12 +63,12 @@ def main():
     universe=[]; page=1; total=None
     try:
         while page<=100:
-            u=f"{a.worker.rstrip('/')}/api/stocks?page={page}&size=500"; p=get_json(u)
+            u=f"{a.worker.rstrip('/')}/api/stocks?page={page}&size=100"; p=get_json(u)
             if p.get("ok") is False or not isinstance(p.get("rows"),list): raise RuntimeError(f"股票列表接口失败：{p}")
             rows=p["rows"]; universe.extend(rows)
             try: total=int(p.get("total")) if p.get("total") is not None else total
             except (TypeError,ValueError): pass
-            if not rows or (total is not None and len(universe)>=total) or len(rows)<500: break
+            if not rows or (total is not None and len(universe)>=total) or len(rows)<100: break
             page+=1; time.sleep(.15)
         print(f"Worker 股票列表：{len(universe)} 条")
     except Exception as e:

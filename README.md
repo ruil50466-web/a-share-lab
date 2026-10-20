@@ -78,7 +78,7 @@ python scripts/analyze_signals.py
 
 ## 妖信号历史K线验证（第一阶段）
 
-- `scripts/fetch_yaogu_history.py`：读取 2026-08-20 至 2026-10-20 的正式妖信号名单，匹配股票代码并抓取历史日K，输出事件收益表。
+- `scripts/fetch_yaogu_history.py`：读取 2026-08-20 至 2026-10-20 的正式妖信号名单，匹配股票代码、抓取历史日K和逐日官方涨停池，输出前置涨停特征与事件收益表。
 - `scripts/analyze_yaogu_history.py`：汇总次日收盘、3/5/10日盘中高点、最大回撤及不同阈值触及率。
 - `docs/yaogu_history_backtest.md`：运行方法、输出文件和统计口径。
 

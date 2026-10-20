@@ -25,6 +25,7 @@ A股短线研究与策略验证实验室。
 - `scripts/validate_data.py`：CSV字段、日期、数值与疑似重复记录检查。
 - `services/market-data-worker.js`：Cloudflare Worker 只读后端，支持行业/概念板块排行和涨停/炸板/跌停池。
 - `market.html`：手机端收盘复盘页面，连接 Worker 后展示板块排行、涨停梯队及炸板/跌停反馈。
+- `stock-picker.html`：智能选股 v1，基于板块排行、涨停池和炸板池对候选做透明规则排序；当前不是完整全市场扫描，详见 `docs/stock_picker_v1.md`。
 
 ## 快速开始
 

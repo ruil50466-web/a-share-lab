@@ -1,0 +1,50 @@
+name: 妖信号历史K线研究
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/fetch_yaogu_history.py"
+      - "scripts/analyze_yaogu_history.py"
+      - "data/observations/yaogu_signal_pool_20260820_20261020.csv"
+      - "docs/yaogu_history_backtest.md"
+      - ".github/workflows/yaogu-history.yml"
+  schedule:
+    - cron: "30 11 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: yaogu-history-research
+  cancel-in-progress: false
+
+jobs:
+  fetch-and-analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch historical K-lines and limit-up pools
+        run: python scripts/fetch_yaogu_history.py --count 120 --sleep 0.3
+      - name: Summarize event outcomes
+        run: python scripts/analyze_yaogu_history.py
+      - name: Commit generated research data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/derived/
+          if git diff --cached --quiet; then
+            echo "No changes in generated research data."
+          else
+            git commit -m "Update 妖信号 historical research data"
+            git push origin HEAD:main
+          fi

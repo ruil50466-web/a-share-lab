@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101827"><title>妖股K线档案 · A-Share Lab</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121d2e;--line:#26354a;--muted:#9aabc2;--text:#eef4ff;--accent:#73b7ff;--up:#ff6875;--down:#42d6a0;--ma5:#f4bd59;--ma10:#73b7ff;--ma20:#c59bff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Noto Sans SC",sans-serif}main{max-width:1100px;margin:auto;padding:16px 12px 40px}h1{font-size:23px;margin:0}h2{font-size:16px;margin:0 0 10px}.muted{color:var(--muted)}.small{font-size:12px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px;margin-top:12px}label{display:block;color:var(--muted);font-size:13px;margin:6px 0 4px}input,textarea,select{width:100%;padding:11px;border:1px solid var(--line);border-radius:9px;background:#0b1422;color:var(--text);font-size:15px}textarea{min-height:80px;resize:vertical}button{border:0;border-radius:9px;padding:10px 13px;font-weight:700;background:var(--accent);color:#07111f;cursor:pointer}.secondary{background:#24354b;color:var(--text)}button:disabled{opacity:.5}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}.actions button{flex:1}.status{font-size:13px;overflow-wrap:anywhere}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.metric{background:#0b1422;border:1px solid var(--line);border-radius:9px;padding:9px;min-width:0}.k{font-size:11px;color:var(--muted)}.v{font-size:17px;font-weight:750;overflow-wrap:anywhere}.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin:8px 0}.dot{display:inline-block;width:9px;height:3px;vertical-align:middle;margin-right:5px}.chartwrap{width:100%;overflow:hidden}canvas{display:block;width:100%;height:410px;background:#0b1422;border-radius:9px}.tablewrap{overflow:auto;max-height:460px}table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}td,th{text-align:right;padding:7px;border-bottom:1px solid var(--line)}td:first-child,th:first-child{text-align:left}.hidden{display:none}.stocklist{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}.chip{background:#203047;color:var(--text);border:1px solid var(--line);border-radius:999px;padding:7px 10px;font-size:12px}.chip.active{border-color:var(--accent);color:var(--accent)}a{color:var(--accent)}@media(max-width:600px){.grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}canvas{height:340px}.v{font-size:15px}}
+</style></head>
+<body><main>
+<h1>📊 妖股历史K线档案</h1>
+<p class="muted small">按股票代码抓取历史日K，显示蜡烛图、MA5/10/20和原始数据表。新加入的股票保存到当前浏览器，下次打开仍在。行情接口可能限流，数据日期与复权口径需核对。</p>
+<section class="panel">
+<h2>① 添加股票 / 查询K线</h2>
+<div class="grid">
+<div><label for="code">股票代码（必填，6位）</label><input id="code" inputmode="numeric" maxlength="6" placeholder="例如 002696"></div>
+<div><label for="name">股票名称（用于标记）</label><input id="name" placeholder="例如 百洋股份"></div>
+<div><label for="signalDate">信号日期（可选）</label><input id="signalDate" type="date"></div>
+</div>
+<div class="actions"><button id="query">查询历史K线</button><button id="add" class="secondary">保存到档案</button><button id="refresh" class="secondary">刷新行情</button></div>
+<p id="status" class="status muted">输入代码后查询；也可从下方档案列表选择。</p>
+<div id="watchlist" class="stocklist"></div>
+<div class="actions"><button id="remove" class="secondary">删除当前档案项</button><button id="export" class="secondary">导出档案CSV</button></div>
+</section>
+<section class="panel">
+<h2>② 批量导入新样本</h2>
+<p class="small muted">每行一只，格式：股票代码,股票名称,信号日期（YYYY-MM-DD）。例如：002696,百洋股份,2026-10-13。不会覆盖现有档案；相同代码+信号日期视为重复。</p>
+<textarea id="bulk" placeholder="002696,百洋股份,2026-10-13&#10;000099,中信海直,2026-10-19"></textarea>
+<div class="actions"><button id="import" class="secondary">导入档案</button></div><p id="importStatus" class="small muted"></p>
+</section>
+<section id="chartPanel" class="panel hidden">
+<div id="stockTitle" class="muted small"></div><div class="metrics" id="metrics"></div>
+<div class="legend"><span><i class="dot" style="background:var(--ma5)"></i>MA5</span><span><i class="dot" style="background:var(--ma10)"></i>MA10</span><span><i class="dot" style="background:var(--ma20)"></i>MA20</span><span>红涨绿跌（中国市场配色）</span></div>
+<div class="chartwrap"><canvas id="chart" aria-label="历史日K蜡烛图和均线"></canvas></div><p id="chartNote" class="small muted"></p>
+</section>
+<section id="tablePanel" class="panel hidden">
+<div class="actions"><button id="copy" class="secondary">复制最近K线</button></div><p id="copyStatus" class="small muted"></p>
+<div class="tablewrap"><table><thead><tr><th>日期</th><th>开盘</th><th>最高</th><th>最低</th><th>收盘</th><th>涨跌幅</th><th>成交量</th><th>MA5</th><th>MA10</th><th>MA20</th></tr></thead><tbody id="rows"></tbody></table></div>
+</section>
+<section class="panel"><h2>研究口径提醒</h2>
+<ul class="small muted"><li>档案保存在当前浏览器本地，不会自动同步到其他手机或浏览器。</li><li>本页当前按股票代码查询日K；名称不作为唯一识别键，避免同名股票错配。</li><li>均线基于接口返回的收盘价计算。接口声明/实际复权口径需独立核验；不要把盘中最高价触及率直接当成可成交胜率。</li><li>公开接口限流时可稍后刷新；请求失败不会生成模拟K线。</li></ul>
+<p><a href="index.html">个股行情主页</a>　·　<a href="market.html">收盘复盘</a>　·　<a href="intraday.html">个股分时</a></p></section>
+</main>
+<script>
+const $=id=>document.getElementById(id), API="https://api.ashareapi.com/v1/kline";
+let bars=[], currentKey="", currentRecord=null;
+const STORE="asharelab_yaogu_kline_watchlist_v1";
+function num(v){if(v===null||v===undefined||v==="")return null;const n=Number(v);return Number.isFinite(n)?n:null}
+function first(o,keys){for(const k of keys)if(o&&o[k]!==undefined&&o[k]!==null&&o[k]!=="")return o[k];return null}
+function fmt(v,d=2){return v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString("zh-CN",{maximumFractionDigits:d})}
+function normCode(v){let s=String(v||"").trim();if(/^(sh|sz)\d{6}$/i.test(s))return s.toLowerCase();if(/^\d{6}$/.test(s))return (/^[569]/.test(s)?"sh":"sz")+s;return ""}
+function loadList(){try{const x=JSON.parse(localStorage.getItem(STORE)||"[]");return Array.isArray(x)?x:[]}catch(e){return []}}
+function saveList(list){localStorage.setItem(STORE,JSON.stringify(list));renderList()}
+function keyOf(x){return x.code+"|"+(x.signalDate||"")}
+function renderList(){const list=loadList(),box=$("watchlist");box.replaceChildren();if(!list.length){box.textContent="档案列表为空。";box.className="stocklist muted small";return}box.className="stocklist";list.forEach((x,i)=>{const b=document.createElement("button");b.className="chip"+(keyOf(x)===currentKey?" active":"");b.textContent=(x.name||x.code)+" · "+x.code+(x.signalDate?" · "+x.signalDate:"");b.onclick=()=>{ $("code").value=x.code.replace(/^(sh|sz)/,"");$("name").value=x.name||"";$("signalDate").value=x.signalDate||"";queryKline(false)};box.appendChild(b)})}
+function calcMA(i,n){if(i+1<n)return null;const vals=bars.slice(i-n+1,i+1).map(x=>x.close);if(vals.some(x=>x===null))return null;return vals.reduce((a,b)=>a+b,0)/n}
+function resizeCanvas(canvas,height){const dpr=window.devicePixelRatio||1,w=Math.max(320,canvas.clientWidth||320);canvas.width=Math.floor(w*dpr);canvas.height=Math.floor(height*dpr);const c=canvas.getContext("2d");c.scale(dpr,dpr);return {c,w,h:height}}
+function draw(){const canvas=$("chart"),{c,w,h}=resizeCanvas(canvas,window.innerWidth<600?340:410);c.clearRect(0,0,w,h);if(!bars.length)return;const left=48,right=12,top=18,bottom=30,plotW=w-left-right,plotH=h-top-bottom;const vals=[];bars.forEach((b,i)=>{vals.push(b.low??b.close,b.high??b.close);[5,10,20].forEach(n=>{const m=calcMA(i,n);if(m!==null)vals.push(m)})});let min=Math.min(...vals),max=Math.max(...vals);if(max===min){max+=1;min-=1}const pad=(max-min)*.06;min-=pad;max+=pad;const y=v=>top+(max-v)/(max-min)*plotH;const step=plotW/bars.length,cw=Math.max(2,Math.min(9,step*.58));
+c.font="10px system-ui";c.textAlign="right";c.textBaseline="middle";for(let j=0;j<=4;j++){const v=min+(max-min)*j/4,yy=y(v);c.strokeStyle="#26354a";c.lineWidth=1;c.beginPath();c.moveTo(left,yy);c.lineTo(w-right,yy);c.stroke();c.fillStyle="#9aabc2";c.fillText(v.toFixed(2),left-5,yy)}
+bars.forEach((b,i)=>{const x=left+(i+.5)*step,hi=y(b.high??b.close),lo=y(b.low??b.close),op=y(b.open??b.close),cl=y(b.close),up=(b.close??0)>=(b.open??b.close),color=up?"#ff6875":"#42d6a0";c.strokeStyle=color;c.fillStyle=color;c.beginPath();c.moveTo(x,hi);c.lineTo(x,lo);c.stroke();const bodyY=Math.min(op,cl),bodyH=Math.max(1,Math.abs(cl-op));if(up)c.strokeRect(x-cw/2,bodyY,cw,bodyH);else c.fillRect(x-cw/2,bodyY,cw,bodyH)});
+[[5,"#f4bd59"],[10,"#73b7ff"],[20,"#c59bff"]].forEach(([n,color])=>{c.beginPath();c.strokeStyle=color;c.lineWidth=1.4;let started=false;bars.forEach((b,i)=>{const m=calcMA(i,n);if(m===null){started=false;return}const x=left+(i+.5)*step,yy=y(m);if(!started){c.moveTo(x,yy);started=true}else c.lineTo(x,yy)});c.stroke()});
+c.fillStyle="#9aabc2";c.textAlign="center";c.textBaseline="top";const ticks=[0,Math.floor((bars.length-1)/2),bars.length-1];ticks.forEach(i=>{if(i>=0){const x=left+(i+.5)*step;c.fillText(String(bars[i].date||"").slice(5),x,h-bottom+8)}})
+}
+function metric(k,v){const d=document.createElement("div");d.className="metric";const a=document.createElement("div");a.className="k";a.textContent=k;const b=document.createElement("div");b.className="v";b.textContent=v;d.append(a,b);return d}
+async function queryKline(saveAfter=false){const code=normCode($("code").value),name=$("name").value.trim(),signalDate=$("signalDate").value;if(!code){$("status").textContent="请输入6位股票代码，例如 002696。";return}const six=code.slice(2);$("status").textContent="正在获取 "+(name||six)+" 的最近120根日K…";$("query").disabled=true;
+try{const res=await fetch(API+"?code="+encodeURIComponent(code)+"&period=day&count=120",{headers:{Accept:"application/json"}});if(!res.ok)throw Error("历史K线接口 HTTP "+res.status);const json=await res.json();if(json.ok===false)throw Error(json.message||json.error||"接口返回失败");let raw=Array.isArray(json.data)?json.data:(json.data&&Array.isArray(json.data.data)?json.data.data:(json.data&&Array.isArray(json.data.klines)?json.data.klines:[]));const parsed=raw.map(b=>({date:first(b,["date","日期","trade_date"]),open:num(first(b,["open","开盘"])),high:num(first(b,["high","最高"])),low:num(first(b,["low","最低"])),close:num(first(b,["last","close","收盘"])),volume:num(first(b,["volume","成交量"])),amount:num(first(b,["amount","成交额"])),turnover:num(first(b,["turnover","换手率"]))})).filter(b=>b.date&&b.close!==null).sort((a,b)=>String(a.date).localeCompare(String(b.date)));if(!parsed.length)throw Error("接口没有返回可识别的日K数据");bars=parsed;currentRecord={code,name:name||six,signalDate};currentKey=keyOf(currentRecord);renderList();renderResults();$("status").textContent="查询成功："+(name||six)+"（"+code+"），返回 "+bars.length+" 根日K，日期 "+bars[0].date+" 至 "+bars[bars.length-1].date+"。";if(saveAfter)addRecord(currentRecord)}catch(e){$("status").textContent="获取失败："+e.message+"。没有生成模拟数据；请检查代码或稍后重试。"}finally{$("query").disabled=false}}
+function renderResults(){ $("chartPanel").classList.remove("hidden");$("tablePanel").classList.remove("hidden");$("stockTitle").textContent=(currentRecord.name||currentRecord.code)+" · "+currentRecord.code+" · 信号日期："+(currentRecord.signalDate||"未填写")+" · 接口K线日期："+bars[0].date+" 至 "+bars[bars.length-1].date;
+const last=bars[bars.length-1],prev=bars.length>1?bars[bars.length-2]:null,ret=prev&&prev.close?100*(last.close/prev.close-1):null,ma5=calcMA(bars.length-1,5),ma10=calcMA(bars.length-1,10),ma20=calcMA(bars.length-1,20),avg=a=>{const x=a.map(b=>b.volume).filter(v=>v!==null);return x.length?x.reduce((s,v)=>s+v,0)/x.length:null},vr=avg(bars.slice(-5))/((avg(bars.slice(-10,-5))||0)||NaN);
+$("metrics").replaceChildren(metric("最新收盘",fmt(last.close)),metric("较前日收盘",ret===null?"—":(ret>=0?"+":"")+ret.toFixed(2)+"%"),metric("MA5 / MA10",fmt(ma5)+" / "+fmt(ma10)),metric("MA20",fmt(ma20)),metric("近5日/前5日均量",Number.isFinite(vr)?vr.toFixed(2)+"倍":"样本不足"),metric("历史K线数",String(bars.length)));
+$("chartNote").textContent="日K与均线按接口返回值计算。接口复权口径尚需核验；信号日未必等于图表最新日。历史最高价只表示盘中曾到达，不代表可成交。";
+const tbody=$("rows");tbody.replaceChildren();bars.slice().reverse().forEach((b,j)=>{const i=bars.length-1-j,prev=i>0?bars[i-1].close:null,change=prev?100*(b.close/prev-1):null,tr=document.createElement("tr");const vals=[b.date,fmt(b.open),fmt(b.high),fmt(b.low),fmt(b.close),change===null?"—":(change>=0?"+":"")+change.toFixed(2)+"%",b.volume===null?"—":fmt(b.volume,0),fmt(calcMA(i,5)),fmt(calcMA(i,10)),fmt(calcMA(i,20))];vals.forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.appendChild(td)});tbody.appendChild(tr)});draw()}
+function addRecord(x){const list=loadList(),k=keyOf(x),i=list.findIndex(y=>keyOf(y)===k);if(i>=0)list[i]={...list[i],...x};else list.unshift(x);saveList(list);$("status").textContent="已保存档案："+(x.name||x.code)+"。"}
+$("query").onclick=()=>queryKline(false);$("refresh").onclick=()=>queryKline(false);$("add").onclick=()=>{const code=normCode($("code").value);if(!code){$("status").textContent="先输入有效股票代码。";return}addRecord({code,name:$("name").value.trim()||code.slice(2),signalDate:$("signalDate").value})};
+$("remove").onclick=()=>{if(!currentRecord){$("status").textContent="先查询或选择一项档案。";return}saveList(loadList().filter(x=>keyOf(x)!==currentKey));$("status").textContent="已从本浏览器档案删除。"};
+$("import").onclick=()=>{const lines=$("bulk").value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);const list=loadList();let added=0,skipped=0;for(const line of lines){const p=line.split(/[,，\t]/).map(s=>s.trim());const code=normCode(p[0]);if(!code){skipped++;continue}const x={code,name:p[1]||code.slice(2),signalDate:p[2]||""};if(list.some(y=>keyOf(y)===keyOf(x))){skipped++;continue}list.unshift(x);added++}saveList(list);$("importStatus").textContent="导入完成：新增 "+added+" 条，跳过 "+skipped+" 条（无效代码或重复）。"};
+$("export").onclick=()=>{const list=loadList();const csv="股票代码,股票名称,信号日期\n"+list.map(x=>[x.code,x.name,x.signalDate].map(v=>'"'+String(v||"").replace(/"/g,'""')+'"').join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));a.download="yaogu_kline_watchlist.csv";a.click();URL.revokeObjectURL(a.href)};
+$("copy").onclick=async()=>{const csv="日期,开盘,最高,最低,收盘,成交量\n"+bars.map(b=>[b.date,b.open,b.high,b.low,b.close,b.volume].join(",")).join("\n");try{await navigator.clipboard.writeText(csv);$("copyStatus").textContent="已复制全部可见历史K线原始数据。"}catch(e){$("copyStatus").textContent="浏览器不允许直接复制，请使用导出功能或长按表格复制。"}};
+window.addEventListener("resize",()=>{if(bars.length)draw()});renderList();
+</script></body></html>

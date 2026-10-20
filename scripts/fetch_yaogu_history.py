@@ -9,10 +9,22 @@ WORKER = "https://a-share-lab-market-data.ruil50466.workers.dev"
 KLINE_API = "https://api.ashareapi.com/v1/kline"
 FIELDS = ["date","code","open","close","high","low","volume","amount","turnover","source","price_basis"]
 
-def get_json(url, timeout=25):
+def get_json(url, timeout=25, retries=4):
+    """Retry transient upstream failures; do not silently convert outages into partial datasets."""
     req = urllib.request.Request(url, headers={"Accept":"application/json","User-Agent":"Mozilla/5.0 AShareLab-YaoguResearch/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+    last_error = None
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception as e:
+            last_error = e
+            if attempt + 1 >= retries:
+                break
+            delay = min(2 ** attempt, 8)
+            print(f"上游请求失败（{attempt + 1}/{retries}），{delay}s 后重试：{e}")
+            time.sleep(delay)
+    raise last_error
 
 def number(v):
     try: return float(v) if v not in (None,"") else None
@@ -32,6 +44,10 @@ def fetch_limit_pool(worker, date):
     rows=payload.get("rows")
     if payload.get("ok") is False or not isinstance(rows,list):
         raise RuntimeError(f"涨停池接口响应异常：{payload}")
+    # A-share market days should not silently become "zero limit-ups" when a
+    # provider lacks historical coverage or returns an empty payload.
+    if not rows:
+        raise RuntimeError("涨停池返回空列表；历史覆盖未知，不能按0只涨停处理")
     found={}
     for row in rows:
         code=norm_code(row.get("code"))
@@ -72,6 +88,9 @@ def main():
             page+=1; time.sleep(.15)
         print(f"Worker 股票列表：{len(universe)} 条")
     except Exception as e:
+        # Discard any partial pages gathered before the failure. They are not a
+        # valid market-wide universe and must not be used as a fallback dataset.
+        universe=[]
         print(f"警告：Worker 股票列表读取失败，尝试独立代码源：{e}")
 
     # Worker 股票列表可能因分页/缓存不完整而漏掉大量名称；用东方财富全市场列表补齐。
@@ -105,7 +124,10 @@ def main():
             time.sleep(.08)
         print(f"东方财富代码映射补充：{em_count} 条；声明总数：{em_total if em_total is not None else '未知'}")
     except Exception as e:
-        print(f"警告：东方财富代码列表补充失败，继续使用 Worker 股票列表：{e}")
+        # If the independent full-market source fails, stop rather than
+        # continuing with a small or stale Worker list.
+        universe=[]
+        print(f"警告：东方财富代码列表补充失败：{e}")
 
     if not universe: raise RuntimeError("Worker 与东方财富股票列表均失败；停止，不能把接口失败当成零样本。")
     by_name={}
@@ -117,6 +139,15 @@ def main():
         name=(s.get("股票名称") or "").strip(); cs=sorted(by_name.get(name,set()))
         if len(cs)==1: name_code[name]=cs[0]
         else: unmatched.append({"信号日期":s.get("信号日期",""),"股票名称":name,"候选代码":";".join(cs),"原因":"未匹配到当前股票列表" if not cs else "同名多代码，需人工核验"})
+    unique_signal_names={str(s.get("股票名称") or "").strip() for s in signals}
+    unique_signal_names.discard("")
+    coverage=len(name_code)/len(unique_signal_names) if unique_signal_names else 0
+    print(f"股票名称匹配覆盖率：{len(name_code)}/{len(unique_signal_names)} = {coverage:.1%}")
+    if coverage < 0.80:
+        raise RuntimeError(
+            f"股票映射覆盖率仅 {coverage:.1%}，低于80%安全阈值；"
+            "停止生成研究结果，避免把不完整样本误报为完整回测。"
+        )
     code_name={v:k for k,v in name_code.items()}; bars=[]; errors=[]
     for i,(code,name) in enumerate(code_name.items(),1):
         try:

@@ -303,60 +303,95 @@ export default {
       fields: "f2,f3,f4,f5,f6,f12,f14,f104,f105,f128,f136",
     }).toString();
 
-    try {
-      let response = null;
-      const attempts = [];
-      for (const host of UPSTREAM_HOSTS) {
-        const upstream = host + "/api/qt/clist/get?" + params;
+    // Eastmoney sometimes rejects /api/ on push2 hosts while /webguest/api/
+    // still works. Try both paths and validate JSON before accepting a host.
+    // A transport/HTTP/HTML error must remain an error, never become an empty list.
+    const sectorHosts = [
+      "https://push2delay.eastmoney.com",
+      "https://82.push2.eastmoney.com",
+      "https://80.push2.eastmoney.com",
+      "https://17.push2.eastmoney.com",
+      "https://79.push2.eastmoney.com",
+      "https://push2.eastmoney.com",
+    ];
+    const paths = ["/webguest/api/qt/clist/get?", "/api/qt/clist/get?"];
+    const attempts = [];
+    let usable = null;
+
+    for (const host of sectorHosts) {
+      for (const path of paths) {
         try {
-          const candidate = await fetch(upstream, {
+          const candidate = await fetch(host + path + params, {
             headers: {
               "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-              "referer": "https://quote.eastmoney.com/",
+              "referer": "https://quote.eastmoney.com/center/",
               "accept": "application/json, text/plain, */*",
+              "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
             },
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(8000),
           });
-          if (candidate.ok) {
-            response = candidate;
-            break;
+          if (!candidate.ok) {
+            const body = await candidate.text().catch(() => "");
+            attempts.push({ host, path: path.split("?")[0], status: candidate.status, statusText: candidate.statusText, body: body.slice(0, 120) });
+            continue;
           }
-          const body = await candidate.text().catch(() => "");
-          attempts.push({ host, status: candidate.status, statusText: candidate.statusText, body: body.slice(0, 160) });
+          let payload;
+          try {
+            payload = await candidate.json();
+          } catch (error) {
+            attempts.push({ host, path: path.split("?")[0], error: "Invalid JSON: " + String(error?.message || error) });
+            continue;
+          }
+          if (payload?.rc !== 0 || !payload?.data || payload?.data?.diff == null) {
+            attempts.push({ host, path: path.split("?")[0], upstreamCode: payload?.rc ?? null, error: "Unexpected payload shape" });
+            continue;
+          }
+          usable = { payload, host, path: path.split("?")[0] };
+          break;
         } catch (error) {
-          attempts.push({ host, error: String(error?.message || error) });
+          attempts.push({ host, path: path.split("?")[0], error: String(error?.message || error) });
         }
       }
-      if (!response) {
-        return json({ error: "All Eastmoney hosts failed", attempts }, 502);
-      }
-      const payload = await response.json();
-      if (payload?.rc !== 0 || !payload?.data?.diff) {
-        return json({ error: "Unexpected upstream response", upstreamCode: payload?.rc ?? null }, 502);
-      }
-      const diff = Array.isArray(payload.data.diff) ? payload.data.diff : Object.values(payload.data.diff);
-      const rows = diff.map((x) => ({
-        code: x.f12 ?? null,
-        name: x.f14 ?? null,
-        change_pct: x.f3 ?? null,
-        change_amount: x.f4 ?? null,
-        turnover_amount: x.f6 ?? null,
-        up_count: x.f104 ?? null,
-        down_count: x.f105 ?? null,
-        leading_stock: x.f128 ?? null,
-        leading_stock_change_pct: x.f136 ?? null,
-      }));
-      return json({
-        ok: true,
-        source: "Eastmoney public quote endpoint",
-        type,
-        fetched_at: new Date().toISOString(),
-        note: "fetched_at is query time, not a guarantee of the quote timestamp; check exchange trading hours.",
-        count: rows.length,
-        rows,
-      });
-    } catch (error) {
-      return json({ error: "Market data request failed", detail: String(error?.message || error) }, 502);
+      if (usable) break;
     }
+
+    if (!usable) {
+      return json({
+        ok: false,
+        error: "All Eastmoney sector endpoints failed",
+        type,
+        requested_at: new Date().toISOString(),
+        attempts,
+        note: "接口失败不等于板块空列表；请勿用失败结果判断板块强弱。",
+      }, 502);
+    }
+
+    const payload = usable.payload;
+    const diff = Array.isArray(payload.data.diff) ? payload.data.diff : Object.values(payload.data.diff || {});
+    const rows = diff.map((x) => ({
+      code: x.f12 ?? null,
+      name: x.f14 ?? null,
+      change_pct: x.f3 ?? null,
+      change_amount: x.f4 ?? null,
+      turnover_amount: x.f6 ?? null,
+      up_count: x.f104 ?? null,
+      down_count: x.f105 ?? null,
+      leading_stock: x.f128 ?? null,
+      leading_stock_change_pct: x.f136 ?? null,
+    }));
+    return json({
+      ok: true,
+      source: "Eastmoney public quote endpoint",
+      source_host: usable.host,
+      source_path: usable.path,
+      type,
+      requested_date: null,
+      fetched_at: new Date().toISOString(),
+      quote_timestamp: null,
+      count: rows.length,
+      empty_reason: rows.length === 0 ? "上游请求成功但返回空列表；行情日期/筛选口径仍需核实，不能直接视为没有强势板块。" : null,
+      note: "fetched_at 是请求成功时间，不等于行情归属日期；本接口未提供可核验的行情时间戳。空列表与请求失败分开处理。",
+      rows,
+    });
   },
 };

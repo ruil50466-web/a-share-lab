@@ -1,0 +1,7 @@
+name = "a-share-lab-mcp"
+main = "services/market-data-mcp-worker.js"
+compatibility_date = "2026-10-19"
+workers_dev = true
+
+[observability]
+enabled = true

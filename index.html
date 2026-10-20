@@ -75,7 +75,7 @@ let latest=null, latestEnvelope=null, report=null, latestHistory=null, latestMar
 function first(o,keys){for(const k of keys){if(o&&o[k]!==undefined&&o[k]!==null&&o[k]!=="")return o[k]}return null}
 function fmt(v,digits=4){if(v===null||v===undefined||v==="")return "未提供";const n=Number(v);if(typeof v==="number"||String(v).trim()!==""&&Number.isFinite(n))return n.toLocaleString("zh-CN",{maximumFractionDigits:digits});return String(v)}
 function num(o,keys){const v=first(o,keys);if(v===null)return null;const n=Number(String(v).replace(/[,，%￥¥\s]/g,""));return Number.isFinite(n)?n:null}
-function toCode(v){v=v.trim();if(!/^\d{6}$/.test(v))throw Error("请输入6位股票代码");return (v.startsWith("6")?"sh":"sz")+v}
+function toCode(v){v=v.trim();if(!/^\d{6}$/.test(v))throw Error("请输入6位股票代码");if(v.startsWith("6"))return "sh"+v;if(v.startsWith("4")||v.startsWith("8")||v.startsWith("92"))return "bj"+v;return "sz"+v}
 function addTag(container,text,kind){const s=document.createElement("span");s.className="tag "+(kind||"");s.textContent=text;container.appendChild(s)}
 function row(label,value){const d=document.createElement("div");d.className="row";const k=document.createElement("span");k.className="key";k.textContent=label;const v=document.createElement("span");v.className="value";v.textContent=value;d.append(k,v);return d}
 function metric(k,v){const d=document.createElement("div");d.className="metric";const a=document.createElement("div");a.className="k";a.textContent=k;const b=document.createElement("div");b.className="v";b.textContent=v;d.append(a,b);return d}

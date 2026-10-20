@@ -64,8 +64,8 @@ function buildCopyText(){
   "扫描时间："+(scanTime?new Date(scanTime).toLocaleString("zh-CN",{hour12:false}):"未知"),
   "分页失败："+(failures.length?failures.map(x=>x.p).join(","):"无")
  ];
- const stockLines=getVisible().map(s=>[s.code,s.name,s.industry||"行业未知",pct(s.change_pct),num(s.price)===null?"—":num(s.price).toFixed(2),money(s.amount),num(s.volume_ratio)===null?"—":num(s.volume_ratio).toFixed(2),pct(s.turnover_pct),pct(s.amplitude_pct),money(s.float_market_cap)].join("\\t"));
- return ["A股全市场扫描结果","数据为行情快照，排名不构成交易信号。",...metricLines,"","行业扩散排名（前20）","行业\\t样本\\t上涨比例\\t涨幅中位数\\t涨停近似数\\t强势股数\\t成交额",...gs.map(g=>[g.name,g.a.length,(g.breadth*100).toFixed(1)+"%",pct(g.med),g.limit,g.strong,money(g.amt)].join("\\t")),"","当前个股列表（最多200条，遵循页面当前筛选与排序）","代码\\t名称\\t行业\\t涨幅\\t现价\\t成交额\\t量比\\t换手\\t振幅\\t流通市值",...stockLines,"","注意：涨停数为涨幅阈值近似值；上游过滤器覆盖范围未独立审计；当前接口无历史日K。"].join("\\n");
+ const stockLines=getVisible().map(s=>[s.code,s.name,s.industry||"行业未知",pct(s.change_pct),num(s.price)===null?"—":num(s.price).toFixed(2),money(s.amount),num(s.volume_ratio)===null?"—":num(s.volume_ratio).toFixed(2),pct(s.turnover_pct),pct(s.amplitude_pct),money(s.float_market_cap)].join("\t"));
+ return ["A股全市场扫描结果","数据为行情快照，排名不构成交易信号。",...metricLines,"","行业扩散排名（前20）","行业\t样本\t上涨比例\t涨幅中位数\t涨停近似数\t强势股数\t成交额",...gs.map(g=>[g.name,g.a.length,(g.breadth*100).toFixed(1)+"%",pct(g.med),g.limit,g.strong,money(g.amt)].join("\t")),"","当前个股列表（最多200条，遵循页面当前筛选与排序）","代码\t名称\t行业\t涨幅\t现价\t成交额\t量比\t换手\t振幅\t流通市值",...stockLines,"","注意：涨停数为涨幅阈值近似值；上游过滤器覆盖范围未独立审计；当前接口无历史日K。"].join("\n");
 }
 async function copyResults(){
  if(!stocks.length){$("status").textContent="还没有扫描结果，请先点击“扫描全市场”。";return}

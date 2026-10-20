@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101827"><title>物理AI盘中观察池 · A股实验室</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121d2e;--line:#26354a;--muted:#9aabc2;--text:#eef4ff;--accent:#73b7ff;--warn:#ffcc80;--up:#ff727d;--down:#54d6a0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Noto Sans SC",sans-serif}main{max-width:1100px;margin:auto;padding:16px 12px 36px}h1{font-size:23px;margin:4px 0}h2{font-size:17px;margin:0 0 8px}p{color:var(--muted);margin:5px 0}.panel{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:13px;margin-top:12px}.actions,.filters{display:flex;gap:8px;flex-wrap:wrap;margin:9px 0}.btn{border:0;border-radius:8px;padding:10px 12px;font-weight:700;background:var(--accent);color:#07111f}.secondary{background:#26374e;color:var(--text)}button:disabled{opacity:.5}.status,.note{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.warning{color:var(--warn)}.good{color:var(--down)}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.metric{background:#0b1422;border:1px solid var(--line);border-radius:9px;padding:9px}.k{font-size:12px;color:var(--muted)}.v{font-size:19px;font-weight:750}.table-wrap{overflow:auto;max-height:650px}table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}th,td{text-align:right;padding:8px 7px;border-bottom:1px solid var(--line)}th{position:sticky;top:0;background:#172438;color:var(--muted);z-index:1}th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}.up{color:var(--up)}.down{color:var(--down)}input,select{background:#0b1422;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px;max-width:100%}.filters input{flex:1;min-width:145px}.small{font-size:12px}@media(max-width:620px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:20px}.panel{padding:10px}}
+</style></head>
+<body><main>
+<p><a href="./index.html">← A股实验室首页</a>　<a href="./full-market.html">全市场扫描</a></p>
+<h1>物理 AI 盘中观察池</h1>
+<p>从全市场快照里筛出机器人、机器视觉、执行器、传感器、自动化及 AI 硬件相关线索，重点看未涨停股是否同步放量走强。</p>
+<div class="panel">
+<div class="actions"><button id="scan" class="btn">扫描观察池</button><button id="copy" class="btn secondary" disabled>复制观察结果</button></div>
+<div id="status" class="status">尚未扫描。数据由浏览器读取 Worker 的分页行情；若有失败页，会明确标记为不完整。</div>
+<div id="meta" class="note"></div>
+</div>
+<div class="panel"><h2>扫描摘要</h2><div id="metrics" class="metrics"></div><p id="warning" class="note"></p></div>
+<div class="panel"><h2>未涨停候选（优先观察）</h2>
+<p class="note">候选由股票名称/行业关键词粗筛，不等于完整概念成分股。按涨幅、量比和成交额筛出线索；没有分时序列时，不推断分时承接或封单质量。</p>
+<div class="filters"><input id="search" placeholder="筛代码 / 名称 / 行业"><select id="sort"><option value="score">综合观察排序</option><option value="change">涨幅从高到低</option><option value="amount">成交额从高到低</option><option value="vr">量比从高到低</option><option value="turnover">换手率从高到低</option></select><label class="small"><input type="checkbox" id="showLimit"> 同时显示涨停阈值命中股</label></div>
+<div class="table-wrap"><table><thead><tr><th>代码</th><th>名称</th><th>行业</th><th>涨幅</th><th>现价</th><th>成交额</th><th>量比</th><th>换手%</th><th>振幅%</th><th>观察标签</th></tr></thead><tbody id="rows"><tr><td colspan="10">扫描后显示</td></tr></tbody></table></div>
+<p id="count" class="note"></p></div>
+<div class="panel"><h2>读数边界</h2><ul class="note"><li>接口返回的是行情快照，抓取时间不等于行情时间，可能有延迟。</li><li>主题匹配基于股票名称和行业字段；接口没有概念成分映射，因此可能漏掉被归入普通电子/机械行业的概念股，也可能混入边缘股。</li><li>“涨停阈值”是粗略估算，不处理 ST、特殊交易状态及所有板块规则；这里只用来区分明显封板候选和未封板候选。</li><li>观察池不能单独作为买入信号；需要再核对板块扩散、连板梯队、分时价格与均价关系、成交量变化。</li></ul></div>
+</main>
+<script>
+const API="https://a-share-lab-market-data.ruil50466.workers.dev";
+const $=id=>document.getElementById(id);let candidates=[],scanInfo=null;
+const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
+const pct=v=>num(v)===null?"—":(num(v)>0?"+":"")+num(v).toFixed(2)+"%";
+const money=v=>{const n=num(v);if(n===null)return"—";if(Math.abs(n)>=1e8)return(n/1e8).toFixed(2)+"亿";if(Math.abs(n)>=1e4)return(n/1e4).toFixed(1)+"万";return n.toFixed(0)};
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const cls=v=>num(v)>0?"up":num(v)<0?"down":"";
+const themes=[
+ ["机器人",/机器人|机器人概念|人形机器人|执行器|减速器|丝杠|灵巧手|机器狗|工业自动化|自动化设备|工业控制|伺服|运动控制|电机|传感器|机器视觉|视觉|智能制造|数控设备|工控设备|机械设备|仪器仪表|智能硬件|AI眼镜|智能穿戴|消费电子|光学光电子|电子元件|电子器件|半导体|计算机设备|通信设备/i],
+ ["物理AI硬件",/福莱新材|泰尔股份|宁波东力|奥比中光|柯力传感|绿的谐波|双环传动|中大力德|鸣志电器|拓普集团|三花智控|汇川技术|埃斯顿|机器人|雷赛智能|兆威机电|步科股份|汉威科技|奥普特|凌云光|奥比中光|科大讯飞|移远通信|瑞芯微|科森科技|精研科技|博通集成|龙旗科技/i]
+];
+function limitThreshold(s){const c=String(s.code||"");if(c.startsWith("300")||c.startsWith("301")||c.startsWith("688")||c.startsWith("689"))return 19.6;if(c.startsWith("4")||c.startsWith("8")||c.startsWith("92"))return 29.6;return 9.6}
+function label(s){const t=[];const name=String(s.name||"")+" "+String(s.industry||"");if(/机器人|执行器|减速器|丝杠|伺服|电机|工业自动化|自动化设备/i.test(name))t.push("机器人/自动化");if(/视觉|光学|摄像头|传感器|仪器仪表/i.test(name))t.push("视觉/传感");if(/AI眼镜|智能穿戴|消费电子|半导体|电子元件|通信设备/i.test(name))t.push("AI硬件");if((num(s.volume_ratio)||0)>=2)t.push("量比≥2");if((num(s.change_pct)||0)>=3)t.push("涨幅≥3%");return t.join("、")||"关键词命中"}
+function score(s){const ch=num(s.change_pct)||0,vr=num(s.volume_ratio)||0,turn=num(s.turnover_pct)||0,amt=Math.max(0,num(s.amount)||0);return Math.max(-10,ch)*2+Math.min(5,vr)*2+Math.min(20,turn)*.15+Math.log10(amt+1)*.8}
+async function getPage(page,size=500){const r=await fetch(API+"/api/stocks?page="+page+"&size="+size,{cache:"no-store"});if(!r.ok)throw Error("第"+page+"页 HTTP "+r.status);const j=await r.json();if(!j.ok||!Array.isArray(j.rows))throw Error("第"+page+"页接口异常："+(j.error||"无 rows"));return j}
+async function scan(){const b=$("scan");b.disabled=true;$("copy").disabled=true;$("status").textContent="正在读取第 1 页…";$("rows").innerHTML='<tr><td colspan="10">加载中…</td></tr>';candidates=[];try{
+ const first=await getPage(1,500);const all=[...first.rows];const total=num(first.total);const size=first.page_size||500;const pages=total?Math.ceil(total/size):1;const failed=[];
+ for(let start=2;start<=pages;start+=3){const batch=[];for(let p=start;p<Math.min(start+3,pages+1);p++)batch.push(p);const rs=await Promise.all(batch.map(async p=>{try{return {p,j:await getPage(p,size)}}catch(e){return {p,error:String(e.message||e)}}}));for(const r of rs){if(r.error)failed.push(r);else all.push(...r.j.rows)}$("status").textContent="分页进度 "+Math.min(start+2,pages)+"/"+pages+"，累计 "+all.length+" 条";}
+ const seen=new Set();const unique=all.filter(s=>{const c=String(s.code||"");if(!c||seen.has(c))return false;seen.add(c);return true});
+ candidates=unique.filter(s=>themes.some(([,re])=>re.test(String(s.name||"")+" "+String(s.industry||""))));
+ scanInfo={time:first.fetched_at||new Date().toISOString(),total,got:unique.length,raw:all.length,failed,partial:failed.length>0||(total!==null&&unique.length<total)};
+ $("meta").textContent="首分页抓取时间："+new Date(scanInfo.time).toLocaleString("zh-CN",{hour12:false})+"｜上游 total："+(total??"未知")+"｜全市场去重："+unique.length+"｜关键词候选："+candidates.length+"｜失败页："+(failed.length?failed.map(x=>x.p).join(","):"无");
+ $("status").innerHTML=scanInfo.partial?'<span class="warning">扫描不完整：不要按完整市场推断。</span> '+(failed.length?"失败页 "+failed.map(x=>x.p).join(",")+"。 ":"")+"返回 "+unique.length+" / total "+(total??"未知"):"<span class=\"good\">分页抓取完成。</span> 关键词筛选只是近似主题池。";
+ $("warning").textContent="本次候选按名称/行业关键词筛选，不能替代完整概念成分映射。";render();$("copy").disabled=!candidates.length;
+ }catch(e){$("status").textContent="扫描失败："+String(e.message||e);$("rows").innerHTML='<tr><td colspan="10">扫描失败</td></tr>'}finally{b.disabled=false}}
+function visible(){let a=[...candidates];const q=$("search").value.trim().toLowerCase();if(q)a=a.filter(s=>[s.code,s.name,s.industry].some(v=>String(v||"").toLowerCase().includes(q)));if(!$("showLimit").checked)a=a.filter(s=>(num(s.change_pct)||0)<limitThreshold(s));const mode=$("sort").value;if(mode==="change")a.sort((x,y)=>(num(y.change_pct)||-999)-(num(x.change_pct)||-999));else if(mode==="amount")a.sort((x,y)=>(num(y.amount)||0)-(num(x.amount)||0));else if(mode==="vr")a.sort((x,y)=>(num(y.volume_ratio)||0)-(num(x.volume_ratio)||0));else if(mode==="turnover")a.sort((x,y)=>(num(y.turnover_pct)||0)-(num(x.turnover_pct)||0));else a.sort((x,y)=>score(y)-score(x));return a}
+function render(){const a=visible();const non=a.filter(s=>(num(s.change_pct)||0)<limitThreshold(s));const up=a.filter(s=>(num(s.change_pct)||0)>0).length;const vol=a.filter(s=>(num(s.volume_ratio)||0)>=2).length;const strong=a.filter(s=>(num(s.change_pct)||0)>=3).length;const lim=candidates.filter(s=>(num(s.change_pct)||0)>=limitThreshold(s)).length;
+ $("metrics").innerHTML=[[ "主题候选",candidates.length],["当前显示",a.length],["候选上涨数",up],["量比≥2",vol],["涨幅≥3%",strong],["涨停阈值命中",lim]].map(([k,v])=>'<div class="metric"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'</div></div>').join("");
+ $("rows").innerHTML=a.slice(0,300).map(s=>'<tr><td>'+esc(s.code)+'</td><td>'+esc(s.name)+'</td><td>'+esc(s.industry||"—")+'</td><td class="'+cls(s.change_pct)+'">'+pct(s.change_pct)+'</td><td>'+(num(s.price)===null?"—":num(s.price).toFixed(2))+'</td><td>'+money(s.amount)+'</td><td>'+(num(s.volume_ratio)===null?"—":num(s.volume_ratio).toFixed(2))+'</td><td>'+pct(s.turnover_pct)+'</td><td>'+pct(s.amplitude_pct)+'</td><td>'+esc(label(s))+'</td></tr>').join("")||'<tr><td colspan="10">没有匹配候选</td></tr>';
+ $("count").textContent="当前显示 "+Math.min(a.length,300)+" / "+a.length+" 条；其中未达粗略涨停阈值 "+non.length+" 条。";
+}
+function copy(){if(!candidates.length)return;const a=visible();const lines=["物理AI盘中观察池","抓取时间："+(scanInfo?.time||"未知"),"全市场样本："+(scanInfo?.got??"未知")+"；关键词候选："+candidates.length,"分页失败："+(scanInfo?.failed?.length?scanInfo.failed.map(x=>x.p).join(","):"无"),"注意：名称/行业关键词粗筛，未验证概念成分；数据时间戳可能延迟。","","代码\t名称\t行业\t涨幅\t现价\t成交额\t量比\t换手率\t振幅\t观察标签",...a.slice(0,300).map(s=>[s.code,s.name,s.industry||"行业未知",pct(s.change_pct),num(s.price)===null?"—":num(s.price).toFixed(2),money(s.amount),num(s.volume_ratio)===null?"—":num(s.volume_ratio).toFixed(2),pct(s.turnover_pct),pct(s.amplitude_pct),label(s)].join("\t"))].join("\n");
+ try{navigator.clipboard.writeText(lines).then(()=>{$("status").textContent="观察池已复制，可直接粘贴到聊天中。"}).catch(()=>fallback(lines))}catch(e){fallback(lines)}}
+function fallback(t){const a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();const ok=document.execCommand("copy");a.remove();$("status").textContent=ok?"观察池已复制，可直接粘贴到聊天中。":"复制失败，请使用浏览器允许的剪贴板操作。"}
+$("scan").addEventListener("click",scan);$("copy").addEventListener("click",copy);$("search").addEventListener("input",render);$("sort").addEventListener("change",render);$("showLimit").addEventListener("change",render);
+</script></body></html>

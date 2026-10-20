@@ -75,25 +75,35 @@ def main():
         print(f"警告：Worker 股票列表读取失败，尝试独立代码源：{e}")
 
     # Worker 股票列表可能因分页/缓存不完整而漏掉大量名称；用东方财富全市场列表补齐。
-    # 这是代码映射兜底，不是行情数据来源；失败时保留 Worker 结果并记录警告。
+    # 东方财富接口单页实际可能封顶100条，因此必须分页，不能只取第一页。
     try:
-        em_url=("https://push2.eastmoney.com/api/qt/clist/get?"
-                + urllib.parse.urlencode({
-                    "pn":"1","pz":"6000","po":"1","np":"1","fltt":"2","invt":"2",
-                    "fid":"f12","fs":"m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-                    "fields":"f12,f14"
-                }))
-        em=get_json(em_url,timeout=30)
-        diff=((em.get("data") or {}).get("diff") or [])
-        em_count=0
-        for row in diff:
-            code=str(row.get("f12") or "").strip()
-            name=str(row.get("f14") or "").strip()
-            if len(code)==6 and code.isdigit() and name:
-                prefix="bj" if code.startswith(("4","8")) else ("sh" if code.startswith(("5","6","9")) else "sz")
-                universe.append({"name":name,"code":prefix+code})
-                em_count+=1
-        print(f"东方财富代码映射补充：{em_count} 条")
+        em_count=0; em_total=None
+        for em_page in range(1, 101):
+            em_url=("https://push2.eastmoney.com/api/qt/clist/get?"
+                    + urllib.parse.urlencode({
+                        "pn":str(em_page),"pz":"100","po":"1","np":"1","fltt":"2","invt":"2",
+                        "fid":"f12","fs":"m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
+                        "fields":"f12,f14"
+                    }))
+            em=get_json(em_url,timeout=30)
+            data=em.get("data") or {}
+            diff=data.get("diff") or []
+            if isinstance(diff,dict): diff=list(diff.values())
+            if not isinstance(diff,list) or not diff: break
+            try: em_total=int(data.get("total")) if data.get("total") is not None else em_total
+            except (TypeError,ValueError): pass
+            for row in diff:
+                if not isinstance(row,dict): continue
+                code=str(row.get("f12") or "").strip()
+                name=str(row.get("f14") or "").strip()
+                if len(code)==6 and code.isdigit() and name:
+                    prefix="bj" if code.startswith(("4","8")) else ("sh" if code.startswith(("5","6","9")) else "sz")
+                    universe.append({"name":name,"code":prefix+code})
+                    em_count+=1
+            if em_total is not None and em_page*100>=em_total: break
+            if len(diff)<100: break
+            time.sleep(.08)
+        print(f"东方财富代码映射补充：{em_count} 条；声明总数：{em_total if em_total is not None else '未知'}")
     except Exception as e:
         print(f"警告：东方财富代码列表补充失败，继续使用 Worker 股票列表：{e}")
 

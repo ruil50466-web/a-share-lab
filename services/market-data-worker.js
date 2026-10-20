@@ -327,57 +327,55 @@ export default {
       fields: "f2,f3,f4,f5,f6,f12,f14,f104,f105,f128,f136",
     }).toString();
 
-    // Eastmoney sometimes rejects /api/ on push2 hosts while /webguest/api/
-    // still works. Try both paths and validate JSON before accepting a host.
-    // A transport/HTTP/HTML error must remain an error, never become an empty list.
+    // Prefer the standard clist endpoint. The legacy /webguest route has
+    // returned 404 on push2delay; avoid wasting a full retry on that path.
+    // Some Eastmoney mirrors fail intermittently, so probe the known hosts in
+    // parallel with a short timeout and accept only a validated JSON payload.
     const sectorHosts = [
+      "https://push2.eastmoney.com",
       "https://push2delay.eastmoney.com",
+      "https://79.push2.eastmoney.com",
       "https://82.push2.eastmoney.com",
       "https://80.push2.eastmoney.com",
       "https://17.push2.eastmoney.com",
-      "https://79.push2.eastmoney.com",
-      "https://push2.eastmoney.com",
+      "https://29.push2.eastmoney.com",
+      "https://91.push2.eastmoney.com",
     ];
-    const paths = ["/webguest/api/qt/clist/get?", "/api/qt/clist/get?"];
     const attempts = [];
-    let usable = null;
-
-    for (const host of sectorHosts) {
-      for (const path of paths) {
-        try {
-          const candidate = await fetch(host + path + params, {
-            headers: {
-              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-              "referer": "https://quote.eastmoney.com/center/",
-              "accept": "application/json, text/plain, */*",
-              "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
-            },
-            signal: AbortSignal.timeout(8000),
-          });
-          if (!candidate.ok) {
-            const body = await candidate.text().catch(() => "");
-            attempts.push({ host, path: path.split("?")[0], status: candidate.status, statusText: candidate.statusText, body: body.slice(0, 120) });
-            continue;
-          }
-          let payload;
-          try {
-            payload = await candidate.json();
-          } catch (error) {
-            attempts.push({ host, path: path.split("?")[0], error: "Invalid JSON: " + String(error?.message || error) });
-            continue;
-          }
-          if (payload?.rc !== 0 || !payload?.data || payload?.data?.diff == null) {
-            attempts.push({ host, path: path.split("?")[0], upstreamCode: payload?.rc ?? null, error: "Unexpected payload shape" });
-            continue;
-          }
-          usable = { payload, host, path: path.split("?")[0] };
-          break;
-        } catch (error) {
-          attempts.push({ host, path: path.split("?")[0], error: String(error?.message || error) });
+    const candidates = await Promise.all(sectorHosts.map(async (host) => {
+      const path = "/api/qt/clist/get";
+      try {
+        const target = new URL(host + path);
+        target.search = params + "&_=" + Date.now();
+        const response = await fetch(target.toString(), {
+          headers: {
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "referer": "https://quote.eastmoney.com/center/",
+            "accept": "application/json, text/plain, */*",
+            "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
+          },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!response.ok) {
+          const body = await response.text().catch(() => "");
+          return { host, path, attempt: { host, path, status: response.status, statusText: response.statusText, body: body.slice(0, 120) } };
         }
+        let payload;
+        try {
+          payload = await response.json();
+        } catch (error) {
+          return { host, path, attempt: { host, path, error: "Invalid JSON: " + String(error?.message || error) } };
+        }
+        if (payload?.rc !== 0 || !payload?.data || payload?.data?.diff == null) {
+          return { host, path, attempt: { host, path, upstreamCode: payload?.rc ?? null, error: "Unexpected payload shape" } };
+        }
+        return { host, path, payload };
+      } catch (error) {
+        return { host, path, attempt: { host, path, error: String(error?.message || error) } };
       }
-      if (usable) break;
-    }
+    }));
+    for (const item of candidates) if (item.attempt) attempts.push(item.attempt);
+    const usable = candidates.find((item) => item.payload) || null;
 
     if (!usable) {
       return json({

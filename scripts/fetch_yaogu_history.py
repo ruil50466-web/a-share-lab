@@ -61,14 +61,19 @@ def main():
     print(f"正式样本 {len(signals)} 条；仅用 2026-08-20 至 2026-10-20，排除六月旧样本。")
 
     universe=[]; page=1; total=None
-    while page<=100:
-        u=f"{a.worker.rstrip('/')}/api/stocks?page={page}&size=500"; p=get_json(u)
-        if p.get("ok") is False or not isinstance(p.get("rows"),list): raise RuntimeError(f"股票列表接口失败：{p}")
-        rows=p["rows"]; universe.extend(rows)
-        try: total=int(p.get("total")) if p.get("total") is not None else total
-        except (TypeError,ValueError): pass
-        if not rows or (total is not None and len(universe)>=total) or len(rows)<500: break
-        page+=1; time.sleep(.15)
+    try:
+        while page<=100:
+            u=f"{a.worker.rstrip('/')}/api/stocks?page={page}&size=500"; p=get_json(u)
+            if p.get("ok") is False or not isinstance(p.get("rows"),list): raise RuntimeError(f"股票列表接口失败：{p}")
+            rows=p["rows"]; universe.extend(rows)
+            try: total=int(p.get("total")) if p.get("total") is not None else total
+            except (TypeError,ValueError): pass
+            if not rows or (total is not None and len(universe)>=total) or len(rows)<500: break
+            page+=1; time.sleep(.15)
+        print(f"Worker 股票列表：{len(universe)} 条")
+    except Exception as e:
+        print(f"警告：Worker 股票列表读取失败，尝试独立代码源：{e}")
+
     # Worker 股票列表可能因分页/缓存不完整而漏掉大量名称；用东方财富全市场列表补齐。
     # 这是代码映射兜底，不是行情数据来源；失败时保留 Worker 结果并记录警告。
     try:
@@ -92,7 +97,7 @@ def main():
     except Exception as e:
         print(f"警告：东方财富代码列表补充失败，继续使用 Worker 股票列表：{e}")
 
-    if not universe: raise RuntimeError("股票列表为空；停止，不能把接口失败当成零样本。")
+    if not universe: raise RuntimeError("Worker 与东方财富股票列表均失败；停止，不能把接口失败当成零样本。")
     by_name={}
     for r in universe:
         name=str(r.get("name") or "").strip(); code=norm_code(r.get("code"))

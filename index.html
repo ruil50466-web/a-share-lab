@@ -212,7 +212,7 @@ async function scanMarket(){
  const endpoints=[
   ["市场总览","https://api.ashareapi.com/v1/market-overview?type=summary"],
   ["当期涨跌分布","https://api.ashareapi.com/v1/changedist"],
-  ["板块涨幅榜","https://hidden-moon-2e25.ruil50466.workers.dev/api/sectors?type=concept&limit=10"]
+  ["板块涨幅榜","https://a-share-lab-market-data.ruil50466.workers.dev/api/sectors?type=concept&limit=10"]
  ];
  try{
   const results=await Promise.all(endpoints.map(async ([label,url])=>{

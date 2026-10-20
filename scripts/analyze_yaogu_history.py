@@ -29,8 +29,8 @@ def grouped(rows, group_field):
         if not key or value is None: continue
         groups.setdefault(key,[]).append((value,n(row.get("次日收盘收益_pct"))))
     if not groups:
-        print(f"\\n按{group_field}分组：暂无完整5日窗口数据"); return
-    print(f"\\n按{group_field}分组（仅计入有完整5日最高收益的事件）：")
+        print(f"\n按{group_field}分组：暂无完整5日窗口数据"); return
+    print(f"\n按{group_field}分组（仅计入有完整5日最高收益的事件）：")
     for key, pairs in sorted(groups.items(),key=lambda x:x[0]):
         highs=[p[0] for p in pairs]
         next_close=[p[1] for p in pairs if p[1] is not None]

@@ -314,8 +314,10 @@ export default {
     if (!Object.prototype.hasOwnProperty.call(FILTERS, type)) {
       return json({ error: "type must be concept or industry" }, 400);
     }
-    const rawLimit = Number(url.searchParams.get("limit") || 20);
-    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(50, Math.floor(rawLimit))) : 20;
+    const rawLimit = Number(url.searchParams.get("limit") || 500);
+    // Return a wide sector candidate set so the browser can independently rank
+    // by change, turnover and breadth instead of re-sorting only the top 30 by change.
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(500, Math.floor(rawLimit))) : 500;
 
     const params = new URLSearchParams({
       pn: "1",

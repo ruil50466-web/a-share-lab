@@ -52,9 +52,11 @@ async function check(){try{const h=await get('/health');$('status').textContent=
 $('save').addEventListener('click',async()=>{try{const u=root();localStorage.setItem('ashare_worker_url',u);await check()}catch(e){$('status').textContent=e.message;$('status').className='status note warning'}});
 $('scan').addEventListener('click',async()=>{const b=$('scan');b.disabled=true;$('status').textContent='正在请求行业、概念及三类涨跌停池…';try{
 const date=$('tradeDate').value.trim();if(!/^\d{8}$/.test(date))throw Error('交易日必须是8位 YYYYMMDD，例如 20261019');const limit=Math.max(5,Math.min(50,Number($('sectorLimit').value)||20));localStorage.setItem('ashare_worker_url',root());
-const [concept,industry,zt,broken,dt]=await Promise.all([
+const settled=await Promise.allSettled([
 get('/api/sectors?type=concept&limit='+limit),get('/api/sectors?type=industry&limit='+limit),
 get('/api/limit-ups?type=zt&date='+date),get('/api/limit-ups?type=broken&date='+date),get('/api/limit-ups?type=dt&date='+date)]);
+const fallback=(r,label)=>r.status==='fulfilled'?r.value:{ok:false,error:label+': '+String(r.reason?.message||r.reason||'请求失败'),rows:[],count:null,requested_date:date};
+const [concept,industry,zt,broken,dt]=settled.map((r,i)=>fallback(r,['概念板块','行业板块','涨停池','炸板池','跌停池'][i]));
 rows('conceptRows',concept.rows,'sector');rows('industryRows',industry.rows,'sector');rows('limitRows',zt.rows,'limit');rows('brokenRows',broken.rows,'pool');rows('downRows',dt.rows,'pool');
 const z=zt.rows||[],br=broken.rows||[],dn=dt.rows||[];const top=z.reduce((m,x)=>Math.max(m,boardNum(x.limit_days)),0);
 $('overview').innerHTML=metric('涨停池返回数',zt.count??z.length)+metric('炸板池返回数',broken.count??br.length)+metric('跌停池返回数',dt.count??dn.length)+metric('查询交易日',date);

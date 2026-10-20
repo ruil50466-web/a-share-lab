@@ -419,28 +419,37 @@ export default {
       for (let pn = 2; pn <= pageCount; pn++) {
         const pageParams = new URLSearchParams({
           pn: String(pn), pz: String(pageSize), po: "1", np: "1",
-          fltt: "2", invt: "2", fid: "f3", fs: FILTERS[type],
+          fltt: "2", invt: "2", fid: sortFields[sort], fs: FILTERS[type],
           fields: "f2,f3,f4,f5,f6,f12,f14,f104,f105,f128,f136",
         });
-        try {
-          const target = new URL(usable.host + usable.path);
-          target.search = pageParams.toString() + "&_=" + Date.now();
-          const response = await fetch(target.toString(), {
-            headers: {
-              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-              "referer": "https://quote.eastmoney.com/center/",
-              "accept": "application/json, text/plain, */*",
-              "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
-            },
-            signal: AbortSignal.timeout(5000),
-          });
-          if (!response.ok) throw new Error("HTTP " + response.status);
-          const pagePayload = await response.json();
-          if (pagePayload?.rc !== 0 || !pagePayload?.data || pagePayload?.data?.diff == null) throw new Error("Unexpected payload shape");
-          const pageDiff = Array.isArray(pagePayload.data.diff) ? pagePayload.data.diff : Object.values(pagePayload.data.diff || {});
-          allDiff.push(...pageDiff);
-        } catch (error) {
-          pageErrors.push({ page: pn, error: String(error?.message || error) });
+        let pageLoaded = false;
+        const retryHosts = [usable.host, ...sectorHosts.filter((host) => host !== usable.host).slice(0, 3)];
+        for (const host of retryHosts) {
+          try {
+            const target = new URL(host + usable.path);
+            target.search = pageParams.toString() + "&_=" + Date.now();
+            const response = await fetch(target.toString(), {
+              headers: {
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "referer": "https://quote.eastmoney.com/center/",
+                "accept": "application/json, text/plain, */*",
+                "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
+              },
+              signal: AbortSignal.timeout(3500),
+            });
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            const pagePayload = await response.json();
+            if (pagePayload?.rc !== 0 || !pagePayload?.data || pagePayload?.data?.diff == null) throw new Error("Unexpected payload shape");
+            const pageDiff = Array.isArray(pagePayload.data.diff) ? pagePayload.data.diff : Object.values(pagePayload.data.diff || {});
+            allDiff.push(...pageDiff);
+            pageLoaded = true;
+            break;
+          } catch (error) {
+            // Retry this page against another known mirror.
+          }
+        }
+        if (!pageLoaded) {
+          pageErrors.push({ page: pn, error: "All retry mirrors failed for this page" });
           break;
         }
       }

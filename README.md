@@ -24,8 +24,10 @@ A股短线研究与策略验证实验室。
 - `scripts/analyze_signals.py`：基于标准库的样本描述性统计脚本。
 - `scripts/validate_data.py`：CSV字段、日期、数值与疑似重复记录检查。
 - `services/market-data-worker.js`：Cloudflare Worker 只读后端，支持行业/概念板块排行和涨停/炸板/跌停池。
-- `market.html`：手机端收盘复盘页面，连接 Worker 后展示板块排行、涨停梯队及炸板/跌停反馈。
-- `stock-picker.html`：智能选股 v1，基于板块排行、涨停池和炸板池对候选做透明规则排序；当前不是完整全市场扫描，详见 `docs/stock_picker_v1.md`。
+- `market.html`：手机端收盘复盘页面。
+- `yaogu-kline.html`：妖股历史K线档案，可按代码查看120根日K、MA5/10/20、表格和量能；支持本地保存、批量导入、CSV导出。
+- `index.html`：个股快照质量检查、历史日线均线与相对量能、基础市场扫描。
+- `intraday.html`：个股分时行情页面。
 
 ## 快速开始
 
@@ -56,17 +58,18 @@ python scripts/analyze_signals.py
 
 ## 手机网页
 
-- `index.html`：个股快照质量检查、历史日线均线与相对量能、基础市场扫描。
-- `market.html`：收盘复盘页。连接已部署的 Worker 后，可拉取概念/行业板块排行、涨停池、炸板池和跌停池，并复制原始复盘材料供进一步分析。
+- [个股行情主页](index.html)
+- [收盘复盘](market.html)
+- [个股分时](intraday.html)
+- [妖股历史K线档案](yaogu-kline.html)：输入股票代码查询历史日K，查看蜡烛图和均线；可把新样本保存到当前浏览器档案，批量导入/导出CSV。
 - `services/market-data-worker.js`：公开行情数据的只读代理；部署步骤见 `docs/market_data_worker_deploy.md`。
 
 ### 重要限制
 
-- `market.html` 需要先部署 Worker，再在页面中填入 Worker 的 HTTPS 根地址；Worker 未部署时页面不会生成模拟数据。
-- 公开行情接口可能限流、变更或返回不完整数据。板块涨幅榜不是主线确认，池子计数也不自动代表全市场完整覆盖。
-- 历史日线使用前复权价格；不要与复权口径未核实的快照直接混算。
-- 当前页面用于收盘复盘与研究，不是持续运行的盯盘服务，也不提供自动下单。
-
+- 公开行情接口可能限流、变更或返回不完整数据。接口失败时页面显示错误，不会生成模拟行情。
+- 妖股K线档案保存在当前浏览器本地，不会自动同步到其他设备；批量导入建议保留股票代码、名称和信号日期。
+- 历史日线的复权口径、成交量单位及数据日期需核对，不要把口径未知的数据直接混算。
+- 页面用于研究，不是持续运行的盯盘服务，也不提供自动下单。
 
 ## 妖股模型研究（2026-10-20）
 
@@ -78,17 +81,9 @@ python scripts/analyze_signals.py
 
 ## 妖信号历史K线验证（第一阶段）
 
-- `scripts/fetch_yaogu_history.py`：读取 2026-08-20 至 2026-10-20 的正式妖信号名单，匹配股票代码、抓取历史日K和逐日官方涨停池，输出前置涨停特征与事件收益表。
+- `scripts/fetch_yaogu_history.py`：读取正式妖信号名单，匹配股票代码、抓取历史日K和逐日涨停池。
 - `scripts/analyze_yaogu_history.py`：汇总次日收盘、3/5/10日盘中高点、最大回撤及不同阈值触及率。
 - `docs/yaogu_history_backtest.md`：运行方法、输出文件和统计口径。
-- `.github/workflows/yaogu-history.yml`：相关文件更新后自动运行，并在工作日北京时间 19:30 定时刷新派生结果（需 GitHub Actions 与上游数据接口正常）。
-
-运行方式：
-
-```bash
-python scripts/fetch_yaogu_history.py
-python scripts/analyze_yaogu_history.py
-```
+- `.github/workflows/yaogu-history.yml`：自动运行工作流；需上游数据接口和GitHub Actions正常。
 
 本阶段是历史事件研究，不是成交级回测。六月旧样本明确排除；代码匹配不确定、行情接口失败、K线覆盖不足的记录必须单独核对。盘中最高价触及率不能称为真实可成交胜率。
-

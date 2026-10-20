@@ -20,8 +20,10 @@ def number(v):
 
 def norm_code(v):
     s=str(v or "").strip()
-    if s.startswith(("sh","sz")) and len(s)==8: return s
-    if len(s)==6 and s.isdigit(): return ("sh" if s.startswith(("5","6","9")) else "sz")+s
+    if s.startswith(("sh","sz","bj")) and len(s)==8: return s
+    if len(s)==6 and s.isdigit():
+        if s.startswith(("4","8")): return "bj"+s
+        return ("sh" if s.startswith(("5","6","9")) else "sz")+s
     return ""
 
 def fetch_limit_pool(worker, date):
@@ -67,6 +69,29 @@ def main():
         except (TypeError,ValueError): pass
         if not rows or (total is not None and len(universe)>=total) or len(rows)<500: break
         page+=1; time.sleep(.15)
+    # Worker 股票列表可能因分页/缓存不完整而漏掉大量名称；用东方财富全市场列表补齐。
+    # 这是代码映射兜底，不是行情数据来源；失败时保留 Worker 结果并记录警告。
+    try:
+        em_url=("https://push2.eastmoney.com/api/qt/clist/get?"
+                + urllib.parse.urlencode({
+                    "pn":"1","pz":"6000","po":"1","np":"1","fltt":"2","invt":"2",
+                    "fid":"f12","fs":"m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
+                    "fields":"f12,f14"
+                }))
+        em=get_json(em_url,timeout=30)
+        diff=((em.get("data") or {}).get("diff") or [])
+        em_count=0
+        for row in diff:
+            code=str(row.get("f12") or "").strip()
+            name=str(row.get("f14") or "").strip()
+            if len(code)==6 and code.isdigit() and name:
+                prefix="bj" if code.startswith(("4","8")) else ("sh" if code.startswith(("5","6","9")) else "sz")
+                universe.append({"name":name,"code":prefix+code})
+                em_count+=1
+        print(f"东方财富代码映射补充：{em_count} 条")
+    except Exception as e:
+        print(f"警告：东方财富代码列表补充失败，继续使用 Worker 股票列表：{e}")
+
     if not universe: raise RuntimeError("股票列表为空；停止，不能把接口失败当成零样本。")
     by_name={}
     for r in universe:

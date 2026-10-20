@@ -112,6 +112,84 @@ export default {
     }
 
 
+    if (url.pathname === "/api/stocks") {
+      const rawPage = Number(url.searchParams.get("page") || 1);
+      const rawSize = Number(url.searchParams.get("size") || 100);
+      const page = Number.isFinite(rawPage) ? Math.max(1, Math.min(100, Math.floor(rawPage))) : 1;
+      const size = Number.isFinite(rawSize) ? Math.max(20, Math.min(500, Math.floor(rawSize))) : 100;
+      const params = new URLSearchParams({
+        pn: String(page),
+        pz: String(size),
+        po: "1",
+        np: "1",
+        fltt: "2",
+        invt: "2",
+        fid: "f3",
+        fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
+        fields: "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21,f23,f100",
+      }).toString();
+      const attempts = [];
+      for (const host of UPSTREAM_HOSTS) {
+        try {
+          const response = await fetch(host + "/api/qt/clist/get?" + params, {
+            headers: {
+              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+              "referer": "https://quote.eastmoney.com/",
+              "accept": "application/json, text/plain, */*",
+            },
+            signal: AbortSignal.timeout(10000),
+          });
+          if (!response.ok) {
+            attempts.push({ host, status: response.status });
+            continue;
+          }
+          const payload = await response.json();
+          if (payload?.rc !== 0 || !payload?.data) {
+            attempts.push({ host, upstreamCode: payload?.rc ?? null });
+            continue;
+          }
+          const data = payload.data;
+          const diff = Array.isArray(data.diff) ? data.diff : Object.values(data.diff || {});
+          const rows = diff.map((x) => ({
+            code: x.f12 ?? null,
+            name: x.f14 ?? null,
+            price: x.f2 ?? null,
+            change_pct: x.f3 ?? null,
+            change_amount: x.f4 ?? null,
+            volume: x.f5 ?? null,
+            amount: x.f6 ?? null,
+            amplitude_pct: x.f7 ?? null,
+            turnover_pct: x.f8 ?? null,
+            pe: x.f9 ?? null,
+            volume_ratio: x.f10 ?? null,
+            high: x.f15 ?? null,
+            low: x.f16 ?? null,
+            open: x.f17 ?? null,
+            prev_close: x.f18 ?? null,
+            total_market_cap: x.f20 ?? null,
+            float_market_cap: x.f21 ?? null,
+            pb: x.f23 ?? null,
+            industry: x.f100 ?? null,
+          }));
+          return json({
+            ok: true,
+            source: "Eastmoney public quote endpoint",
+            universe: "Eastmoney A-share market filter; verify board coverage against the current upstream filter semantics",
+            page,
+            page_size: size,
+            total: data.total ?? null,
+            count: rows.length,
+            fetched_at: new Date().toISOString(),
+            note: "Snapshot data may be delayed. Request all pages for a broad scan; fields and market coverage depend on upstream endpoint behavior. This endpoint does not provide historical daily bars.",
+            rows,
+          });
+        } catch (error) {
+          attempts.push({ host, error: String(error?.message || error) });
+        }
+      }
+      return json({ error: "All Eastmoney hosts failed", attempts }, 502);
+    }
+
     if (url.pathname === "/api/intraday") {
       const rawCode = url.searchParams.get("code") || "";
       // Normalize full-width digits and remove whitespace from mobile keyboards.
@@ -202,7 +280,7 @@ export default {
     }
 
     if (url.pathname !== "/api/sectors") {
-      return json({ error: "Not found", routes: ["/health", "/api/sectors?type=concept|industry", "/api/limit-ups?type=zt|broken|dt&date=YYYYMMDD", "/api/intraday?code=600519"] }, 404);
+      return json({ error: "Not found", routes: ["/health", "/api/sectors?type=concept|industry", "/api/stocks?page=1&size=100", "/api/limit-ups?type=zt|broken|dt&date=YYYYMMDD", "/api/intraday?code=600519"] }, 404);
     }
 
     const type = url.searchParams.get("type") || "concept";

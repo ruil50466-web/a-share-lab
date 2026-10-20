@@ -342,40 +342,49 @@ export default {
       "https://91.push2.eastmoney.com",
     ];
     const attempts = [];
-    const candidates = await Promise.all(sectorHosts.map(async (host) => {
-      const path = "/api/qt/clist/get";
-      try {
-        const target = new URL(host + path);
-        target.search = params + "&_=" + Date.now();
-        const response = await fetch(target.toString(), {
-          headers: {
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            "referer": "https://quote.eastmoney.com/center/",
-            "accept": "application/json, text/plain, */*",
-            "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
-          },
-          signal: AbortSignal.timeout(5000),
-        });
-        if (!response.ok) {
-          const body = await response.text().catch(() => "");
-          return { host, path, attempt: { host, path, status: response.status, statusText: response.statusText, body: body.slice(0, 120) } };
-        }
-        let payload;
+    let usable = null;
+
+    // Limit upstream fan-out: concept and industry are requested concurrently
+    // by the page, so probing every mirror at once can create unnecessary load.
+    // Probe in small batches; stop as soon as a validated response is found.
+    for (let i = 0; i < sectorHosts.length && !usable; i += 2) {
+      const batch = sectorHosts.slice(i, i + 2);
+      const candidates = await Promise.all(batch.map(async (host) => {
+        const path = "/api/qt/clist/get";
         try {
-          payload = await response.json();
+          const target = new URL(host + path);
+          target.search = params + "&_=" + Date.now();
+          const response = await fetch(target.toString(), {
+            headers: {
+              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+              "referer": "https://quote.eastmoney.com/center/",
+              "accept": "application/json, text/plain, */*",
+              "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
+            },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (!response.ok) {
+            const body = await response.text().catch(() => "");
+            return { host, path, attempt: { host, path, status: response.status, statusText: response.statusText, body: body.slice(0, 120) } };
+          }
+          let payload;
+          try {
+            payload = await response.json();
+          } catch (error) {
+            return { host, path, attempt: { host, path, error: "Invalid JSON: " + String(error?.message || error) } };
+          }
+          if (payload?.rc !== 0 || !payload?.data || payload?.data?.diff == null) {
+            return { host, path, attempt: { host, path, upstreamCode: payload?.rc ?? null, error: "Unexpected payload shape" } };
+          }
+          return { host, path, payload };
         } catch (error) {
-          return { host, path, attempt: { host, path, error: "Invalid JSON: " + String(error?.message || error) } };
+          return { host, path, attempt: { host, path, error: String(error?.message || error) } };
         }
-        if (payload?.rc !== 0 || !payload?.data || payload?.data?.diff == null) {
-          return { host, path, attempt: { host, path, upstreamCode: payload?.rc ?? null, error: "Unexpected payload shape" } };
-        }
-        return { host, path, payload };
-      } catch (error) {
-        return { host, path, attempt: { host, path, error: String(error?.message || error) } };
-      }
-    }));
-    for (const item of candidates) if (item.attempt) attempts.push(item.attempt);
-    const usable = candidates.find((item) => item.payload) || null;
+      }));
+      for (const item of candidates) if (item.attempt) attempts.push(item.attempt);
+      const found = candidates.find((item) => item.payload);
+      if (found) usable = found;
+    }
 
     if (!usable) {
       return json({

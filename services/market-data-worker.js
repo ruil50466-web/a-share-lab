@@ -134,9 +134,7 @@ export default {
       const paths = ["/webguest/api/qt/clist/get?", "/api/qt/clist/get?"];
       const candidates = [
         [UPSTREAM_HOSTS[0], paths[0]],
-        [UPSTREAM_HOSTS[0], paths[1]],
-        [UPSTREAM_HOSTS[1], paths[0]],
-        [UPSTREAM_HOSTS[2], paths[0]],
+        [UPSTREAM_HOSTS[1], paths[1]],
       ];
       for (const [host, path] of candidates) {
           try {
@@ -147,7 +145,7 @@ export default {
                 "accept": "application/json, text/plain, */*",
                 "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
               },
-              signal: AbortSignal.timeout(5000),
+              signal: AbortSignal.timeout(4000),
             });
             if (!response.ok) {
               const body = await response.text().catch(() => "");

@@ -24,6 +24,19 @@ def norm_code(v):
     if len(s)==6 and s.isdigit(): return ("sh" if s.startswith(("5","6","9")) else "sz")+s
     return ""
 
+def fetch_limit_pool(worker, date):
+    url=f"{worker.rstrip('/')}/api/limit-ups?type=zt&date={date.replace('-','')}"
+    payload=get_json(url, timeout=20)
+    rows=payload.get("rows")
+    if payload.get("ok") is False or not isinstance(rows,list):
+        raise RuntimeError(f"涨停池接口响应异常：{payload}")
+    found={}
+    for row in rows:
+        code=norm_code(row.get("code"))
+        if code:
+            found[code]=row.get("limit_days")
+    return found
+
 def write_csv(path, rows, fields):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w",encoding="utf-8-sig",newline="") as f:
@@ -90,13 +103,40 @@ def main():
     bars=sorted(unique.values(),key=lambda b:(b["code"],b["date"]))
     by_code={}
     for b in bars: by_code.setdefault(b["code"],[]).append(b)
+
+    # Fetch official daily limit-up pools only for actual trading dates in the study window.
+    # A failed pool query is recorded as unknown, never treated as zero limit-ups.
+    trade_dates=sorted({b["date"] for b in bars if "2026-08-01" <= b["date"] <= "2026-10-20"})
+    pools={}; pool_ok={}; pool_errors=[]
+    for j, d in enumerate(trade_dates, 1):
+        try:
+            pools[d]=fetch_limit_pool(a.worker,d); pool_ok[d]=True
+            print(f"[涨停池 {j}/{len(trade_dates)}] {d}: {len(pools[d])} 只")
+        except Exception as e:
+            pools[d]={}; pool_ok[d]=False
+            pool_errors.append({"日期":d,"错误":str(e)[:500]})
+            print(f"[涨停池 {j}/{len(trade_dates)}] {d}: 失败 {e}")
+        time.sleep(max(0,a.sleep))
+
     outcomes=[]
     for s in signals:
         name=(s.get("股票名称") or "").strip(); date=(s.get("信号日期") or "")[:10]; code=name_code.get(name,"")
         bs=by_code.get(code,[]); dates=[b["date"] for b in bs]
-        base={"信号日期":date,"股票代码":code,"股票名称":name,"当日收盘":"","次日收盘收益_pct":"","次日最高收益_pct":"","3日最高收益_pct":"","5日最高收益_pct":"","10日最高收益_pct":"","3日最大回撤_pct":"","5日最大回撤_pct":"","有效后续K线数":0,"状态":"代码未匹配或缺少信号日K线"}
+        base={"信号日期":date,"股票代码":code,"股票名称":name,"当日收盘":"","信号日是否涨停":"","信号日连板高度":"","前1交易日涨停":"","前3交易日涨停次数":"","前5交易日涨停次数":"","前10交易日涨停次数":"","前10日最近涨停距今交易日数":"","次日收盘收益_pct":"","次日最高收益_pct":"","3日最高收益_pct":"","5日最高收益_pct":"","10日最高收益_pct":"","3日最大回撤_pct":"","5日最大回撤_pct":"","有效后续K线数":0,"状态":"代码未匹配或缺少信号日K线"}
         if code and date in dates:
             i=dates.index(date); close=bs[i]["close"]; fut=bs[i+1:]
+            if pool_ok.get(date):
+                base["信号日是否涨停"]="是" if code in pools.get(date,{}) else "否"
+                base["信号日连板高度"]=pools.get(date,{}).get(code,0)
+            for nwin, col in ((1,"前1交易日涨停"),(3,"前3交易日涨停次数"),(5,"前5交易日涨停次数"),(10,"前10交易日涨停次数")):
+                prior=dates[max(0,i-nwin):i]
+                if len(prior)==nwin and all(pool_ok.get(d,False) for d in prior):
+                    hits=sum(code in pools.get(d,{}) for d in prior)
+                    base[col]="是" if nwin==1 and hits else ("否" if nwin==1 else hits)
+            prior10=dates[max(0,i-10):i]
+            if len(prior10)==10 and all(pool_ok.get(d,False) for d in prior10):
+                distances=[10-k for k,d in enumerate(prior10) if code in pools.get(d,{})]
+                base["前10日最近涨停距今交易日数"]=min(distances) if distances else "10日内无涨停"
             def hi(n):
                 if len(fut) < n: return ""
                 vals=[x["high"] for x in fut[:n] if x["high"] is not None]
@@ -110,8 +150,9 @@ def main():
     write_csv(out/"yaogu_daily_klines.csv",bars,FIELDS)
     write_csv(out/"yaogu_signal_code_match.csv",[{"股票名称":n,"股票代码":c} for n,c in sorted(name_code.items())],["股票名称","股票代码"])
     write_csv(out/"yaogu_unmatched_names.csv",unmatched,["信号日期","股票名称","候选代码","原因"])
-    write_csv(out/"yaogu_signal_outcomes.csv",outcomes,["信号日期","股票代码","股票名称","当日收盘","次日收盘收益_pct","次日最高收益_pct","3日最高收益_pct","5日最高收益_pct","10日最高收益_pct","3日最大回撤_pct","5日最大回撤_pct","有效后续K线数","状态"])
+    write_csv(out/"yaogu_signal_outcomes.csv",outcomes,["信号日期","股票代码","股票名称","当日收盘","信号日是否涨停","信号日连板高度","前1交易日涨停","前3交易日涨停次数","前5交易日涨停次数","前10交易日涨停次数","前10日最近涨停距今交易日数","次日收盘收益_pct","次日最高收益_pct","3日最高收益_pct","5日最高收益_pct","10日最高收益_pct","3日最大回撤_pct","5日最大回撤_pct","有效后续K线数","状态"])
     write_csv(out/"yaogu_fetch_errors.csv",errors,["股票代码","股票名称","错误"])
+    write_csv(out/"yaogu_limit_pool_errors.csv",pool_errors,["日期","错误"])
     print("\n输出目录：",out)
     print(f"名称匹配 {len(name_code)} 个；未匹配/歧义 {len(unmatched)} 条；历史K线 {len(bars)} 根；抓取错误 {len(errors)} 条。")
     print("收益以信号日收盘为基准，仅计算之后交易日；最高收益不代表可成交卖点。检查日期覆盖、复权口径和缺失记录后再计算正式胜率。")

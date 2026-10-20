@@ -129,66 +129,90 @@ export default {
         fields: "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21,f23,f100",
       }).toString();
       const attempts = [];
+      // Eastmoney hosts may reject one route while another host/path still works.
+      // Try both documented frontend path variants and retain diagnostics.
+      const paths = ["/webguest/api/qt/clist/get?", "/api/qt/clist/get?"];
       for (const host of UPSTREAM_HOSTS) {
-        try {
-          const response = await fetch(host + "/api/qt/clist/get?" + params, {
-            headers: {
-              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-              "referer": "https://quote.eastmoney.com/",
-              "accept": "application/json, text/plain, */*",
-            },
-            signal: AbortSignal.timeout(10000),
-          });
-          if (!response.ok) {
-            const body = await response.text().catch(() => "");
-            attempts.push({ host, status: response.status, statusText: response.statusText, body: body.slice(0, 240) });
-            continue;
+        for (const path of paths) {
+          try {
+            const response = await fetch(host + path + params, {
+              headers: {
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "referer": "https://quote.eastmoney.com/center/",
+                "accept": "application/json, text/plain, */*",
+                "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
+              },
+              signal: AbortSignal.timeout(8000),
+            });
+            if (!response.ok) {
+              const body = await response.text().catch(() => "");
+              attempts.push({ host, path: path.split("?")[0], status: response.status, statusText: response.statusText, body: body.slice(0, 180) });
+              continue;
+            }
+            let payload;
+            try {
+              payload = await response.json();
+            } catch (error) {
+              attempts.push({ host, path: path.split("?")[0], error: "Invalid JSON: " + String(error?.message || error) });
+              continue;
+            }
+            if (payload?.rc !== 0 || !payload?.data || payload?.data?.diff == null) {
+              attempts.push({ host, path: path.split("?")[0], upstreamCode: payload?.rc ?? null, error: "Unexpected payload shape" });
+              continue;
+            }
+            const data = payload.data;
+            const diff = Array.isArray(data.diff) ? data.diff : Object.values(data.diff || {});
+            const rows = diff.map((x) => ({
+              code: x.f12 ?? null,
+              name: x.f14 ?? null,
+              price: x.f2 ?? null,
+              change_pct: x.f3 ?? null,
+              change_amount: x.f4 ?? null,
+              volume: x.f5 ?? null,
+              amount: x.f6 ?? null,
+              amplitude_pct: x.f7 ?? null,
+              turnover_pct: x.f8 ?? null,
+              pe: x.f9 ?? null,
+              volume_ratio: x.f10 ?? null,
+              high: x.f15 ?? null,
+              low: x.f16 ?? null,
+              open: x.f17 ?? null,
+              prev_close: x.f18 ?? null,
+              total_market_cap: x.f20 ?? null,
+              float_market_cap: x.f21 ?? null,
+              pb: x.f23 ?? null,
+              industry: x.f100 ?? null,
+            }));
+            return json({
+              ok: true,
+              source: "Eastmoney public quote endpoint",
+              source_host: host,
+              source_path: path.split("?")[0],
+              universe: "Eastmoney A-share market filter; verify board coverage against the current upstream filter semantics",
+              page,
+              page_size: size,
+              total: data.total ?? null,
+              count: rows.length,
+              fetched_at: new Date().toISOString(),
+              quote_timestamp: null,
+              note: "fetched_at is request-success time, not quote date; snapshot may be delayed. Verify total and fetch all pages. Historical daily bars are not provided.",
+              empty_reason: rows.length === 0 ? "Upstream request succeeded but returned an empty page; check page number, total, and upstream filter." : null,
+              rows,
+            });
+          } catch (error) {
+            attempts.push({ host, path: path.split("?")[0], error: String(error?.message || error) });
           }
-          const payload = await response.json();
-          if (payload?.rc !== 0 || !payload?.data) {
-            attempts.push({ host, upstreamCode: payload?.rc ?? null });
-            continue;
-          }
-          const data = payload.data;
-          const diff = Array.isArray(data.diff) ? data.diff : Object.values(data.diff || {});
-          const rows = diff.map((x) => ({
-            code: x.f12 ?? null,
-            name: x.f14 ?? null,
-            price: x.f2 ?? null,
-            change_pct: x.f3 ?? null,
-            change_amount: x.f4 ?? null,
-            volume: x.f5 ?? null,
-            amount: x.f6 ?? null,
-            amplitude_pct: x.f7 ?? null,
-            turnover_pct: x.f8 ?? null,
-            pe: x.f9 ?? null,
-            volume_ratio: x.f10 ?? null,
-            high: x.f15 ?? null,
-            low: x.f16 ?? null,
-            open: x.f17 ?? null,
-            prev_close: x.f18 ?? null,
-            total_market_cap: x.f20 ?? null,
-            float_market_cap: x.f21 ?? null,
-            pb: x.f23 ?? null,
-            industry: x.f100 ?? null,
-          }));
-          return json({
-            ok: true,
-            source: "Eastmoney public quote endpoint",
-            universe: "Eastmoney A-share market filter; verify board coverage against the current upstream filter semantics",
-            page,
-            page_size: size,
-            total: data.total ?? null,
-            count: rows.length,
-            fetched_at: new Date().toISOString(),
-            note: "Snapshot data may be delayed. Request all pages for a broad scan; fields and market coverage depend on upstream endpoint behavior. This endpoint does not provide historical daily bars.",
-            rows,
-          });
-        } catch (error) {
-          attempts.push({ host, error: String(error?.message || error) });
         }
       }
-      return json({ error: "All Eastmoney hosts failed", attempts }, 502);
+      return json({
+        ok: false,
+        error: "All Eastmoney stock endpoints failed",
+        page,
+        page_size: size,
+        requested_at: new Date().toISOString(),
+        attempts,
+        note: "接口失败不等于空列表；不要用失败结果判断全市场涨跌或板块强弱。",
+      }, 502);
     }
 
     if (url.pathname === "/api/intraday") {

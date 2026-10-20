@@ -20,6 +20,25 @@ def summarize(rows, field, label):
         for threshold in (5,10,20):
             print(f"  触及 +{threshold}% 盘中高点占比（不是可实现胜率）: {sum(v>=threshold for v in vals)/len(vals):.1%}")
 
+
+def grouped(rows, group_field):
+    groups={}
+    for row in rows:
+        key=str(row.get(group_field) or "").strip()
+        value=n(row.get("5日最高收益_pct"))
+        if not key or value is None: continue
+        groups.setdefault(key,[]).append((value,n(row.get("次日收盘收益_pct"))))
+    if not groups:
+        print(f"\\n按{group_field}分组：暂无完整5日窗口数据"); return
+    print(f"\\n按{group_field}分组（仅计入有完整5日最高收益的事件）：")
+    for key, pairs in sorted(groups.items(),key=lambda x:x[0]):
+        highs=[p[0] for p in pairs]
+        next_close=[p[1] for p in pairs if p[1] is not None]
+        hit10=sum(v>=10 for v in highs)/len(highs)
+        next_pos=sum(v>0 for v in next_close)/len(next_close) if next_close else None
+        next_text=f"{next_pos:.1%}" if next_pos is not None else "无数据"
+        print(f"  {key}: n={len(highs)} | 5日盘中高点触及+10%={hit10:.1%} | 5日高点收益中位数={statistics.median(highs):.2f}% | 次日收盘正收益={next_text}")
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("file",nargs="?",default=str(DEFAULT))
@@ -41,6 +60,8 @@ def main():
         ("5日最大回撤_pct","5日最大回撤"),
     ]: summarize(valid,field,label)
     print("\n解释限制：正收益率不是策略胜率；盘中最高价命中率不是可成交胜率。需先核对代码匹配、数据覆盖、复权口径和信号可见时点。")
+    grouped(valid,"信号日连板高度")
+    grouped(valid,"前5交易日涨停次数")
     print("六月旧样本未被读取。重复入选按信号事件保留，因此事件条数不等于独立股票数。")
 
 if __name__=="__main__": main()
